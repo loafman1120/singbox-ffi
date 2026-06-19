@@ -280,6 +280,9 @@ runs `flutter pub publish --dry-run`, then uploads
 `singbox_ffi-<version>.zip` and `singbox_ffi-<version>.tar.gz` as workflow
 artifacts.
 
+The top-level `examples/` smoke tests are excluded from the pub package because
+Pub only recognizes the singular `example/` convention.
+
 When the workflow runs from a `v<version>` tag or a published GitHub Release,
 the package archives are also attached to the GitHub Release. The tag version
 must match `pubspec.yaml`.

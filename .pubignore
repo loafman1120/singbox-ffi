@@ -3,6 +3,7 @@
 .github/
 .gocache/
 downloaded-artifacts/
+examples/
 build/
 dist/
 singbox_ffi-*/

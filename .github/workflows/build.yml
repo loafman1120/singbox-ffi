@@ -436,11 +436,14 @@ jobs:
           install_name_tool -id @rpath/libsingboxffi.dylib macos/Libraries/libsingboxffi.dylib
 
           mkdir -p ios/Frameworks
+          mkdir -p build/package-headers/ios-arm64 build/package-headers/ios-simulator-arm64
+          cp downloaded-artifacts/singboxffi-ios-arm64-static/libsingboxffi.h build/package-headers/ios-arm64/
+          cp downloaded-artifacts/singboxffi-ios-simulator-arm64-static/libsingboxffi.h build/package-headers/ios-simulator-arm64/
           xcodebuild -create-xcframework \
             -library downloaded-artifacts/singboxffi-ios-arm64-static/libsingboxffi.a \
-            -headers downloaded-artifacts/singboxffi-ios-arm64-static \
+            -headers build/package-headers/ios-arm64 \
             -library downloaded-artifacts/singboxffi-ios-simulator-arm64-static/libsingboxffi.a \
-            -headers downloaded-artifacts/singboxffi-ios-simulator-arm64-static \
+            -headers build/package-headers/ios-simulator-arm64 \
             -output ios/Frameworks/singboxffi.xcframework
 
       - name: Validate package metadata
