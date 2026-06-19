@@ -455,38 +455,7 @@ jobs:
 
       - name: Create package archives
         shell: bash
-        run: |
-          set -euo pipefail
-          version="$(awk '/^version:/ { print $2; exit }' pubspec.yaml)"
-          package="singbox_ffi-${version}"
-          mkdir -p dist "${package}"
-          cp .pubignore .pubignore.pubdev
-          printf '%s\n' \
-            '.agents/' \
-            '.codex/' \
-            '.github/' \
-            '.gocache/' \
-            'downloaded-artifacts/' \
-            'examples/' \
-            'build/' \
-            'dist/' \
-            'singbox_ffi-*/' \
-            'cache.db' \
-            'configuration.json' \
-            'CrashReport-*.log' \
-            '*.exe' \
-            '*.test' \
-            '*.out' > .pubignore
-          rsync -a \
-            --exclude .git \
-            --exclude downloaded-artifacts \
-            --exclude dist \
-            --exclude "${package}" \
-            ./ "${package}/"
-          mv .pubignore.pubdev .pubignore
-          zip -r "dist/${package}.zip" "${package}"
-          tar -czf "dist/${package}.tar.gz" "${package}"
-          rm -rf "${package}" downloaded-artifacts
+        run: bash .github/scripts/create-release-archives.sh
 
       - name: Upload packaged plugin
         uses: actions/upload-artifact@v4
