@@ -50,9 +50,14 @@ artifacts:
 - iOS: link `ios/Libraries/libsingboxffi.a` or a vendored framework/xcframework so
   `DynamicLibrary.process()` can resolve native symbols.
 
-The package expects prebuilt native artifacts to be generated before publishing
-or consuming the plugin. Flutter build files intentionally fail fast when a
+The pub.dev package is intentionally lightweight and does not include native
+artifacts. Release builds attach a complete GitHub Release package containing
+the prebuilt artifacts. Flutter build files intentionally fail fast when a
 desktop artifact is missing.
+
+Apps that need batteries-included native artifacts should consume the GitHub
+Release package or copy the matching Release artifacts into the directories
+listed above.
 
 ## Build Locally
 
@@ -261,8 +266,8 @@ plugin with `path: ../..` and should not be consumed as the public API.
 
 ## Release Automation
 
-GitHub Actions builds native artifacts and assembles a release-ready Flutter
-plugin package.
+GitHub Actions builds native artifacts, validates the lightweight pub.dev
+package, and assembles a complete GitHub Release package.
 
 On every push, pull request, manual dispatch, and GitHub Release publication,
 `.github/workflows/build.yml` builds:
@@ -276,9 +281,10 @@ On every push, pull request, manual dispatch, and GitHub Release publication,
   `ios/Frameworks/singboxffi.xcframework`
 
 The packaging job copies those artifacts into the Flutter plugin directories,
-runs `flutter pub publish --dry-run`, then uploads
-`singbox_ffi-<version>.zip` and `singbox_ffi-<version>.tar.gz` as workflow
-artifacts.
+runs `flutter pub publish --dry-run` against the lightweight pub.dev package,
+then uploads `singbox_ffi-<version>.zip` and `singbox_ffi-<version>.tar.gz` as
+workflow artifacts. Those archives keep the native artifacts and are intended
+for GitHub Release consumption.
 
 The top-level `examples/` smoke tests are excluded from the pub package because
 Pub only recognizes the singular `example/` convention.
@@ -288,9 +294,10 @@ the package archives are also attached to the GitHub Release. The tag version
 must match `pubspec.yaml`.
 
 When the workflow runs from a `v<version>` tag, it also attempts
-`flutter pub publish --force`. Pub.dev automated publishing must be enabled for
-`loafman1120/singbox-ffi` with a matching tag pattern such as `v{{version}}`,
-and the first package version must still be published manually on pub.dev.
+`flutter pub publish --force` for the lightweight package. Pub.dev automated
+publishing must be enabled for `loafman1120/singbox-ffi` with a matching tag
+pattern such as `v{{version}}`, and the first package version must still be
+published manually on pub.dev.
 
 ## Status
 
