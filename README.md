@@ -237,6 +237,71 @@ build/singboxffi.dll
 build/singboxffi.h
 ```
 
+## Example Program
+
+The C example in `examples/c/check_config.c` calls the exported FFI directly:
+
+- `sb_version`
+- `sb_go_version`
+- `sb_init`
+- `sb_check_config`
+- `sb_free_string`
+
+Build the DLL first, then compile the example against the generated header.
+
+Windows with MinGW-w64:
+
+```powershell
+gcc -I build examples\c\check_config.c -L build -lsingboxffi -o build\check_config.exe
+$env:PATH = "$(Resolve-Path build);$env:PATH"
+build\check_config.exe
+```
+
+Linux:
+
+```bash
+cc -I build examples/c/check_config.c -L build -lsingboxffi -Wl,-rpath,'$ORIGIN' -o build/check_config
+./build/check_config
+```
+
+macOS:
+
+```bash
+cc -I build examples/c/check_config.c -L build -lsingboxffi -Wl,-rpath,@loader_path -o build/check_config
+./build/check_config
+```
+
+## Flutter FFI Binding
+
+The Flutter-ready Dart binding lives in `examples/flutter`:
+
+```text
+examples/flutter
+  pubspec.yaml
+  lib/singbox_ffi.dart
+  bin/check_config.dart
+```
+
+It covers the current Phase 0 ABI:
+
+- `sb_version`
+- `sb_go_version`
+- `sb_init`
+- `sb_check_config`
+- `sb_free_string`
+
+Run the smoke test after building the native library:
+
+```powershell
+cd examples\flutter
+dart pub get
+dart run bin\check_config.dart ..\..\build\singboxffi.dll
+```
+
+For a Flutter desktop app, load the library with `SingboxFfi.open(path)` and
+ship the native library beside the app executable, or pass the absolute path
+where your installer places it.
+
 GitHub Actions:
 
 The repository includes `.github/workflows/build.yml`, which builds the Windows `c-shared` DLL on `windows-latest` with MSYS2 UCRT64 GCC and uploads `singboxffi.dll` plus `singboxffi.h` as an artifact.
@@ -282,6 +347,17 @@ replace github.com/sagernet/sing-box => C:\Users\kangj\Documents\Project\sing-bo
 ```
 
 Do not expose upstream Go API directly to host applications. Host applications should only depend on this C ABI.
+
+## License Notice
+
+This project links against `github.com/sagernet/sing-box/experimental/libbox`.
+sing-box is distributed under the GNU General Public License, version 3 or later,
+with the additional upstream naming restriction copied in `LICENSE.sing-box`.
+
+Distributions of this wrapper, linked binaries, and applications embedding the
+produced native library should carry the corresponding GPL notice and must not
+use the sing-box name or imply association with the upstream application without
+prior consent.
 
 ## Milestones
 
