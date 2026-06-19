@@ -27,7 +27,7 @@ const _configJson = '''
 
 void main(List<String> args) {
   final libraryPath = args.isEmpty ? null : args.first;
-  final singbox = SingboxFfi.open(libraryPath);
+  final singbox = SingboxFfi.openDefault(libraryPath);
 
   print('sing-box version: ${singbox.version()}');
   print('go version: ${singbox.goVersion()}');

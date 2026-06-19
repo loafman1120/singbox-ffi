@@ -140,6 +140,10 @@ class SingboxRawBindings {
     );
   }
 
+  factory SingboxRawBindings.openDefault([String? path]) {
+    return SingboxRawBindings(SingboxFfi.openDefaultLibrary(path));
+  }
+
   factory SingboxRawBindings.process() {
     return SingboxRawBindings(DynamicLibrary.process());
   }
@@ -204,6 +208,10 @@ class SingboxFfi {
     return SingboxFfi._(SingboxRawBindings.open(path));
   }
 
+  factory SingboxFfi.openDefault([String? path]) {
+    return SingboxFfi._(SingboxRawBindings.openDefault(path));
+  }
+
   factory SingboxFfi.process() {
     return SingboxFfi._(SingboxRawBindings.process());
   }
@@ -216,6 +224,54 @@ class SingboxFfi {
       return 'libsingboxffi.dylib';
     }
     return 'libsingboxffi.so';
+  }
+
+  static DynamicLibrary openDefaultLibrary([String? path]) {
+    if (path != null && path.isNotEmpty) {
+      return DynamicLibrary.open(path);
+    }
+
+    final libraryName = defaultLibraryName;
+    final searched = <String>{};
+    final candidates = <String>[
+      _joinPath(Directory.current.path, libraryName),
+      _joinPath(File(Platform.executable).parent.path, libraryName),
+      _joinPath(File(Platform.resolvedExecutable).parent.path, libraryName),
+    ];
+
+    Object? lastError;
+    for (final candidate in candidates) {
+      if (!searched.add(candidate)) {
+        continue;
+      }
+      try {
+        return DynamicLibrary.open(candidate);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    try {
+      return DynamicLibrary.open(libraryName);
+    } catch (error) {
+      throw SingboxException(
+        'failed to open $libraryName from default search paths: '
+        '${lastError ?? error}',
+      );
+    }
+  }
+
+  static String _joinPath(String directory, String fileName) {
+    if (directory.isEmpty || directory == '.') {
+      return fileName;
+    }
+    final separator = Platform.pathSeparator;
+    if (directory.endsWith(separator) ||
+        directory.endsWith('/') ||
+        directory.endsWith('\\')) {
+      return '$directory$fileName';
+    }
+    return '$directory$separator$fileName';
   }
 
   final SingboxRawBindings raw;

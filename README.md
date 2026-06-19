@@ -92,15 +92,18 @@ SbFreeHandleNative / SbFreeHandleDart
 
 SingboxNativeSymbols
 SingboxRawBindings
+SingboxRawBindings.openDefault([path])
 ```
 
 High-level Dart API:
 
 ```dart
 SingboxFfi.open([path])
+SingboxFfi.openDefault([path])
 SingboxFfi.fromLibrary(library)
 SingboxFfi.process()
 SingboxFfi.defaultLibraryName
+SingboxFfi.openDefaultLibrary([path])
 SingboxFfi.raw
 SingboxFfi.version()
 SingboxFfi.goVersion()
@@ -126,15 +129,29 @@ SingboxException
 Dynamic linking is the recommended desktop path:
 
 ```dart
-final core = SingboxFfi.open('singboxffi.dll');
+final core = SingboxFfi.openDefault('singboxffi.dll');
 ```
 
-Static linking is possible, but the native library must be linked into the
-Flutter runner, app executable, or a platform plugin first. Then use:
+`SingboxFfi.openDefault([path])` searches in this order:
+
+1. The explicit `path`, when provided.
+2. The current working directory.
+3. The executable directory from `Platform.executable`.
+4. The resolved executable directory from `Platform.resolvedExecutable`.
+5. The platform loader default via `DynamicLibrary.open(defaultLibraryName)`.
+
+Static linking is possible, but `SingboxFfi.process()` is not a normal fallback
+mode for this plain Dart package. It only works after the native library has
+already been linked into the Flutter runner, app executable, or platform plugin
+so that symbols such as `sb_version` are visible in the process. Then use:
 
 ```dart
 final core = SingboxFfi.process();
 ```
+
+Short term: do not expose `process()` to app users as an ordinary optional
+mode unless `singbox-ffi` also provides the platform project that links the
+native symbols into the app.
 
 Build a static C archive instead of a dynamic library:
 
@@ -152,10 +169,15 @@ Platform notes:
   toolchain care.
 - Linux/macOS desktop: static linking works through the native runner build, but
   a shared library is simpler to package and update.
-- Android: link the Go archive into a plugin/shared object per ABI; Flutter
-  still packages native code inside the APK/AAB.
-- iOS: static linking is the normal route; expose symbols to the process and
-  use `SingboxFfi.process()`.
+- Android: package ABI-specific `.so` files through a Flutter FFI plugin.
+- iOS: static archive or framework linking should be provided by a Flutter FFI
+  plugin; only then can `SingboxFfi.process()` resolve native symbols.
+
+The next stage for mobile and static mode is to upgrade `singbox_ffi` from a
+plain Dart package to a Flutter FFI plugin. That plugin should own
+Windows/macOS/Linux native library linking or packaging, Android ABI `.so`
+packaging, iOS/macOS static archive or framework linking, and the platform
+setup required for `DynamicLibrary.process()` to find `sb_version`.
 
 ## ABI
 
