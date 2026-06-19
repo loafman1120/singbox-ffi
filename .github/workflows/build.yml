@@ -461,23 +461,22 @@ jobs:
           package="singbox_ffi-${version}"
           mkdir -p dist "${package}"
           cp .pubignore .pubignore.pubdev
-          cat > .pubignore <<'EOF'
-.agents/
-.codex/
-.github/
-.gocache/
-downloaded-artifacts/
-examples/
-build/
-dist/
-singbox_ffi-*/
-cache.db
-configuration.json
-CrashReport-*.log
-*.exe
-*.test
-*.out
-EOF
+          printf '%s\n' \
+            '.agents/' \
+            '.codex/' \
+            '.github/' \
+            '.gocache/' \
+            'downloaded-artifacts/' \
+            'examples/' \
+            'build/' \
+            'dist/' \
+            'singbox_ffi-*/' \
+            'cache.db' \
+            'configuration.json' \
+            'CrashReport-*.log' \
+            '*.exe' \
+            '*.test' \
+            '*.out' > .pubignore
           rsync -a \
             --exclude .git \
             --exclude downloaded-artifacts \
