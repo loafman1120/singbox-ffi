@@ -271,7 +271,7 @@ On every push, pull request, manual dispatch, and GitHub Release publication,
 - Linux x86_64/aarch64 `libsingboxffi.so`
 - macOS x86_64/arm64 `libsingboxffi.dylib`
 - Android `arm64-v8a`, `armeabi-v7a`, `x86_64`, and `x86`
-  `libsingboxffi.so`
+  `libsingboxffi.so` shared libraries
 - iOS device/simulator static archives, assembled into
   `ios/Frameworks/singboxffi.xcframework`
 

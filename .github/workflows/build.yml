@@ -272,27 +272,11 @@ jobs:
             -ldflags "${LDFLAGS}" \
             -o "build/android/${{ matrix.abi }}/libsingboxffi.so" .
 
-      - name: Build JNI static archive
-        shell: bash
-        env:
-          CGO_ENABLED: "1"
-          GOOS: android
-          GOARCH: ${{ matrix.goarch }}
-          GOARM: ${{ matrix.goarm }}
-        run: |
-          set -euo pipefail
-          export CC="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.cc }}${ANDROID_API}-clang"
-          mkdir -p "build/android/${{ matrix.abi }}"
-          go build -buildmode=c-archive \
-            -tags "${ANDROID_TAGS}" \
-            -ldflags "${LDFLAGS}" \
-            -o "build/android/${{ matrix.abi }}/libsingboxffi.a" .
-
       - name: Inspect artifacts
         shell: bash
         run: |
           set -euo pipefail
-          ls -lh "build/android/${{ matrix.abi }}/libsingboxffi.so" "build/android/${{ matrix.abi }}/libsingboxffi.a" "build/android/${{ matrix.abi }}/libsingboxffi.h"
+          ls -lh "build/android/${{ matrix.abi }}/libsingboxffi.so" "build/android/${{ matrix.abi }}/libsingboxffi.h"
           file "build/android/${{ matrix.abi }}/libsingboxffi.so"
           grep -E "sb_version|sb_go_version|sb_init|sb_check_config|sb_free_string" "build/android/${{ matrix.abi }}/libsingboxffi.h"
 
@@ -302,15 +286,6 @@ jobs:
           name: singboxffi-${{ matrix.target }}
           path: |
             build/android/${{ matrix.abi }}/libsingboxffi.so
-            build/android/${{ matrix.abi }}/libsingboxffi.h
-          if-no-files-found: error
-
-      - name: Upload static artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: singboxffi-${{ matrix.target }}-static
-          path: |
-            build/android/${{ matrix.abi }}/libsingboxffi.a
             build/android/${{ matrix.abi }}/libsingboxffi.h
           if-no-files-found: error
 
