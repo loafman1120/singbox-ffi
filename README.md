@@ -259,6 +259,36 @@ dependencies:
 `examples/flutter` is only a smoke/example package. It depends on the root
 plugin with `path: ../..` and should not be consumed as the public API.
 
+## Release Automation
+
+GitHub Actions builds native artifacts and assembles a release-ready Flutter
+plugin package.
+
+On every push, pull request, manual dispatch, and GitHub Release publication,
+`.github/workflows/build.yml` builds:
+
+- Windows x64 `singboxffi.dll`
+- Linux x86_64/aarch64 `libsingboxffi.so`
+- macOS x86_64/arm64 `libsingboxffi.dylib`
+- Android `arm64-v8a`, `armeabi-v7a`, `x86_64`, and `x86`
+  `libsingboxffi.so`
+- iOS device/simulator static archives, assembled into
+  `ios/Frameworks/singboxffi.xcframework`
+
+The packaging job copies those artifacts into the Flutter plugin directories,
+runs `flutter pub publish --dry-run`, then uploads
+`singbox_ffi-<version>.zip` and `singbox_ffi-<version>.tar.gz` as workflow
+artifacts.
+
+When the workflow runs from a `v<version>` tag or a published GitHub Release,
+the package archives are also attached to the GitHub Release. The tag version
+must match `pubspec.yaml`.
+
+When the workflow runs from a `v<version>` tag, it also attempts
+`flutter pub publish --force`. Pub.dev automated publishing must be enabled for
+`loafman1120/singbox-ffi` with a matching tag pattern such as `v{{version}}`,
+and the first package version must still be published manually on pub.dev.
+
 ## Status
 
 Implemented:

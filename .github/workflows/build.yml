@@ -7,6 +7,9 @@ on:
     tags:
       - "v*"
   pull_request:
+  release:
+    types:
+      - published
   workflow_dispatch:
 
 permissions:
@@ -310,3 +313,203 @@ jobs:
             build/android/${{ matrix.abi }}/libsingboxffi.a
             build/android/${{ matrix.abi }}/libsingboxffi.h
           if-no-files-found: error
+
+  ios:
+    name: iOS ${{ matrix.target }}
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ios-arm64
+            sdk: iphoneos
+            goarch: arm64
+            min_flag: -miphoneos-version-min=12.0
+            out_dir: build/ios/iphoneos
+
+          - target: ios-simulator-arm64
+            sdk: iphonesimulator
+            goarch: arm64
+            min_flag: -mios-simulator-version-min=12.0
+            out_dir: build/ios/iphonesimulator-arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build static archive
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+          GOOS: ios
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          sdk_path="$(xcrun --sdk "${{ matrix.sdk }}" --show-sdk-path)"
+          export CC="$(xcrun --sdk "${{ matrix.sdk }}" --find clang)"
+          export CGO_CFLAGS="-isysroot ${sdk_path} ${{ matrix.min_flag }}"
+          export CGO_LDFLAGS="-isysroot ${sdk_path} ${{ matrix.min_flag }}"
+          mkdir -p "${{ matrix.out_dir }}"
+          go build -buildmode=c-archive \
+            -tags "${DESKTOP_TAGS}" \
+            -ldflags "${LDFLAGS}" \
+            -o "${{ matrix.out_dir }}/libsingboxffi.a" .
+
+      - name: Inspect artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -lh "${{ matrix.out_dir }}/libsingboxffi.a" "${{ matrix.out_dir }}/libsingboxffi.h"
+          grep -E "sb_version|sb_go_version|sb_init|sb_check_config|sb_free_string" "${{ matrix.out_dir }}/libsingboxffi.h"
+
+      - name: Upload static artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: singboxffi-${{ matrix.target }}-static
+          path: |
+            ${{ matrix.out_dir }}/libsingboxffi.a
+            ${{ matrix.out_dir }}/libsingboxffi.h
+          if-no-files-found: error
+
+  package:
+    name: Package Flutter plugin
+    runs-on: macos-15
+    needs:
+      - desktop
+      - android
+      - ios
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded-artifacts
+
+      - name: Setup Dart OIDC publishing
+        uses: dart-lang/setup-dart@v1
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Validate release version
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_version="$(awk '/^version:/ { print $2; exit }' pubspec.yaml)"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ "${package_version}" != "${tag_version}" ]; then
+            echo "pubspec version ${package_version} does not match release tag ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+      - name: Assemble plugin artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          copy_file() {
+            local src="$1"
+            local dst="$2"
+            if [ ! -f "${src}" ]; then
+              echo "missing ${src}" >&2
+              exit 1
+            fi
+            mkdir -p "$(dirname "${dst}")"
+            cp "${src}" "${dst}"
+          }
+
+          copy_file downloaded-artifacts/singboxffi-windows-amd64/singboxffi.dll windows/artifacts/x64/singboxffi.dll
+          copy_file downloaded-artifacts/singboxffi-windows-amd64/singboxffi.h windows/artifacts/x64/singboxffi.h
+
+          copy_file downloaded-artifacts/singboxffi-linux-amd64/libsingboxffi.so linux/artifacts/x86_64/libsingboxffi.so
+          copy_file downloaded-artifacts/singboxffi-linux-amd64/libsingboxffi.h linux/artifacts/x86_64/libsingboxffi.h
+          copy_file downloaded-artifacts/singboxffi-linux-arm64/libsingboxffi.so linux/artifacts/aarch64/libsingboxffi.so
+          copy_file downloaded-artifacts/singboxffi-linux-arm64/libsingboxffi.h linux/artifacts/aarch64/libsingboxffi.h
+
+          copy_file downloaded-artifacts/singboxffi-android-arm64-v8a/libsingboxffi.so android/src/main/jniLibs/arm64-v8a/libsingboxffi.so
+          copy_file downloaded-artifacts/singboxffi-android-arm64-v8a/libsingboxffi.h android/src/main/jniLibs/arm64-v8a/libsingboxffi.h
+          copy_file downloaded-artifacts/singboxffi-android-armeabi-v7a/libsingboxffi.so android/src/main/jniLibs/armeabi-v7a/libsingboxffi.so
+          copy_file downloaded-artifacts/singboxffi-android-armeabi-v7a/libsingboxffi.h android/src/main/jniLibs/armeabi-v7a/libsingboxffi.h
+          copy_file downloaded-artifacts/singboxffi-android-x86_64/libsingboxffi.so android/src/main/jniLibs/x86_64/libsingboxffi.so
+          copy_file downloaded-artifacts/singboxffi-android-x86_64/libsingboxffi.h android/src/main/jniLibs/x86_64/libsingboxffi.h
+          copy_file downloaded-artifacts/singboxffi-android-x86/libsingboxffi.so android/src/main/jniLibs/x86/libsingboxffi.so
+          copy_file downloaded-artifacts/singboxffi-android-x86/libsingboxffi.h android/src/main/jniLibs/x86/libsingboxffi.h
+
+          mkdir -p macos/Libraries
+          lipo -create \
+            downloaded-artifacts/singboxffi-macos-amd64/libsingboxffi.dylib \
+            downloaded-artifacts/singboxffi-macos-arm64/libsingboxffi.dylib \
+            -output macos/Libraries/libsingboxffi.dylib
+          install_name_tool -id @rpath/libsingboxffi.dylib macos/Libraries/libsingboxffi.dylib
+
+          mkdir -p ios/Frameworks
+          xcodebuild -create-xcframework \
+            -library downloaded-artifacts/singboxffi-ios-arm64-static/libsingboxffi.a \
+            -headers downloaded-artifacts/singboxffi-ios-arm64-static \
+            -library downloaded-artifacts/singboxffi-ios-simulator-arm64-static/libsingboxffi.a \
+            -headers downloaded-artifacts/singboxffi-ios-simulator-arm64-static \
+            -output ios/Frameworks/singboxffi.xcframework
+
+      - name: Validate package metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+          flutter pub publish --dry-run
+
+      - name: Create package archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(awk '/^version:/ { print $2; exit }' pubspec.yaml)"
+          package="singbox_ffi-${version}"
+          mkdir -p dist "${package}"
+          rsync -a \
+            --exclude .git \
+            --exclude downloaded-artifacts \
+            --exclude dist \
+            --exclude "${package}" \
+            ./ "${package}/"
+          zip -r "dist/${package}.zip" "${package}"
+          tar -czf "dist/${package}.tar.gz" "${package}"
+          rm -rf "${package}" downloaded-artifacts
+
+      - name: Upload packaged plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: singbox_ffi-flutter-plugin-package
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+          if-no-files-found: error
+
+      - name: Upload package to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/*.tar.gz
+
+      - name: Publish to pub.dev
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: flutter pub publish --force

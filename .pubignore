@@ -2,8 +2,10 @@
 .codex/
 .github/
 .gocache/
+downloaded-artifacts/
 build/
 dist/
+singbox_ffi-*/
 cache.db
 configuration.json
 CrashReport-*.log
