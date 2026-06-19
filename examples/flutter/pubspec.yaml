@@ -1,5 +1,5 @@
-name: singbox_ffi_flutter_example
-description: Dart FFI bindings for the singbox-ffi Phase 0 ABI.
+name: lithenet_ffi_example
+description: Dart FFI bindings and proxy runner for LitheNet Core.
 version: 0.1.0
 publish_to: none
 

@@ -1,4 +1,4 @@
-import 'package:singbox_ffi_flutter_example/singbox_ffi.dart';
+import 'package:lithenet_ffi_example/singbox_ffi.dart';
 
 const _configJson = '''
 {

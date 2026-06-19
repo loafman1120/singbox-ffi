@@ -10,3 +10,5 @@ dist/
 *.test
 *.out
 *.log
+cache.db
+configuration.json

@@ -56,6 +56,34 @@ typedef _SbCheckConfigDart = int Function(
   Pointer<Pointer<Utf8>>,
 );
 
+typedef _SbStartNative = Int32 Function(
+  Pointer<Utf8>,
+  Pointer<Uint64>,
+  Pointer<Pointer<Utf8>>,
+);
+typedef _SbStartDart = int Function(
+  Pointer<Utf8>,
+  Pointer<Uint64>,
+  Pointer<Pointer<Utf8>>,
+);
+
+typedef _SbReloadNative = Int32 Function(
+  Uint64,
+  Pointer<Utf8>,
+  Pointer<Pointer<Utf8>>,
+);
+typedef _SbReloadDart = int Function(
+  int,
+  Pointer<Utf8>,
+  Pointer<Pointer<Utf8>>,
+);
+
+typedef _SbStopNative = Int32 Function(Uint64, Pointer<Pointer<Utf8>>);
+typedef _SbStopDart = int Function(int, Pointer<Pointer<Utf8>>);
+
+typedef _SbFreeHandleNative = Int32 Function(Uint64);
+typedef _SbFreeHandleDart = int Function(int);
+
 class SingboxException implements Exception {
   SingboxException(this.message);
 
@@ -110,6 +138,19 @@ class SingboxFfi {
         _sbCheckConfig =
             _lib.lookupFunction<_SbCheckConfigNative, _SbCheckConfigDart>(
           'sb_check_config',
+        ),
+        _sbStart = _lib.lookupFunction<_SbStartNative, _SbStartDart>(
+          'sb_start',
+        ),
+        _sbReload = _lib.lookupFunction<_SbReloadNative, _SbReloadDart>(
+          'sb_reload',
+        ),
+        _sbStop = _lib.lookupFunction<_SbStopNative, _SbStopDart>(
+          'sb_stop',
+        ),
+        _sbFreeHandle =
+            _lib.lookupFunction<_SbFreeHandleNative, _SbFreeHandleDart>(
+          'sb_free_handle',
         );
 
   factory SingboxFfi.open([String? path]) {
@@ -118,12 +159,12 @@ class SingboxFfi {
 
   static String get defaultLibraryName {
     if (Platform.isWindows) {
-      return 'singboxffi.dll';
+      return 'lithenetcore.dll';
     }
     if (Platform.isMacOS || Platform.isIOS) {
-      return 'libsingboxffi.dylib';
+      return 'liblithenetcore.dylib';
     }
-    return 'libsingboxffi.so';
+    return 'liblithenetcore.so';
   }
 
   final DynamicLibrary _lib;
@@ -132,6 +173,10 @@ class SingboxFfi {
   final _SbFreeStringDart _sbFreeString;
   final _SbInitDart _sbInit;
   final _SbCheckConfigDart _sbCheckConfig;
+  final _SbStartDart _sbStart;
+  final _SbReloadDart _sbReload;
+  final _SbStopDart _sbStop;
+  final _SbFreeHandleDart _sbFreeHandle;
 
   String version() => _takeString(_sbVersion());
 
@@ -192,6 +237,56 @@ class SingboxFfi {
     }
   }
 
+  SingboxService start(String configJson) {
+    final config = configJson.toNativeUtf8(allocator: calloc);
+    final handleOut = calloc<Uint64>();
+    final errOut = calloc<Pointer<Utf8>>();
+    try {
+      final code = _sbStart(config, handleOut, errOut);
+      if (code != 0) {
+        throw SingboxException(_takeError(errOut));
+      }
+      return SingboxService._(this, handleOut.value);
+    } finally {
+      calloc.free(config);
+      calloc.free(handleOut);
+      calloc.free(errOut);
+    }
+  }
+
+  void reload(int handle, String configJson) {
+    final config = configJson.toNativeUtf8(allocator: calloc);
+    final errOut = calloc<Pointer<Utf8>>();
+    try {
+      final code = _sbReload(handle, config, errOut);
+      if (code != 0) {
+        throw SingboxException(_takeError(errOut));
+      }
+    } finally {
+      calloc.free(config);
+      calloc.free(errOut);
+    }
+  }
+
+  void stop(int handle) {
+    final errOut = calloc<Pointer<Utf8>>();
+    try {
+      final code = _sbStop(handle, errOut);
+      if (code != 0) {
+        throw SingboxException(_takeError(errOut));
+      }
+    } finally {
+      calloc.free(errOut);
+    }
+  }
+
+  void freeHandle(int handle) {
+    final code = _sbFreeHandle(handle);
+    if (code != 0) {
+      throw SingboxException('invalid handle');
+    }
+  }
+
   String _takeString(Pointer<Utf8> pointer) {
     if (pointer == nullptr) {
       return '';
@@ -209,5 +304,32 @@ class SingboxFfi {
       return 'unknown error';
     }
     return _takeString(pointer);
+  }
+}
+
+class SingboxService {
+  SingboxService._(this._ffi, this.handle);
+
+  final SingboxFfi _ffi;
+  final int handle;
+  bool _closed = false;
+
+  void reload(String configJson) {
+    if (_closed) {
+      throw SingboxException('service is closed');
+    }
+    _ffi.reload(handle, configJson);
+  }
+
+  void close() {
+    if (_closed) {
+      return;
+    }
+    _closed = true;
+    try {
+      _ffi.stop(handle);
+    } finally {
+      _ffi.freeHandle(handle);
+    }
   }
 }
