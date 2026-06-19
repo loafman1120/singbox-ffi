@@ -226,7 +226,7 @@ Windows:
 $env:CGO_ENABLED="1"
 go build -trimpath -buildmode=c-shared `
   -tags "with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_purego,with_clash_api,badlinkname,tfogo_checklinkname0" `
-  -ldflags "-s -w -buildid=" `
+  -ldflags "-s -w -buildid= -checklinkname=0" `
   -o build\singboxffi.dll .
 ```
 
