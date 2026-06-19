@@ -44,10 +44,10 @@ artifacts:
 - Windows: bundle `windows/artifacts/x64/singboxffi.dll`.
 - Linux: bundle `linux/artifacts/x86_64/libsingboxffi.so`.
 - macOS: link/package `macos/Libraries/libsingboxffi.dylib`,
-  `macos/Libraries/libsingboxffi.a`, or a vendored framework.
+  `macos/Libraries/libsingboxffi.a`, or a vendored framework/xcframework.
 - Android: package ABI-specific `.so` files from
   `android/src/main/jniLibs/<abi>/libsingboxffi.so`.
-- iOS: link `ios/Libraries/libsingboxffi.a` or a vendored framework so
+- iOS: link `ios/Libraries/libsingboxffi.a` or a vendored framework/xcframework so
   `DynamicLibrary.process()` can resolve native symbols.
 
 The package expects prebuilt native artifacts to be generated before publishing
@@ -111,6 +111,7 @@ SbFreeHandleNative / SbFreeHandleDart
 
 SingboxNativeSymbols
 SingboxRawBindings
+SingboxRawBindings.openBundled([path])
 SingboxRawBindings.openDefault([path])
 ```
 
@@ -118,10 +119,12 @@ High-level Dart API:
 
 ```dart
 SingboxFfi.open([path])
+SingboxFfi.openBundled([path])
 SingboxFfi.openDefault([path])
 SingboxFfi.fromLibrary(library)
 SingboxFfi.process()
 SingboxFfi.defaultLibraryName
+SingboxFfi.openBundledLibrary([path])
 SingboxFfi.openDefaultLibrary([path])
 SingboxFfi.raw
 SingboxFfi.version()
@@ -144,6 +147,21 @@ SingboxException
 ```
 
 ## Static Linking
+
+Use the bundled plugin default in Flutter apps:
+
+```dart
+final core = SingboxFfi.openBundled();
+```
+
+`SingboxFfi.openBundled([path])` follows the packaging strategy used by the
+plugin:
+
+1. Use the explicit `path`, when provided.
+2. On iOS, use `DynamicLibrary.process()` because the plugin links the static
+   archive or framework into the app.
+3. On Android, Windows, Linux, and default macOS builds, use dynamic loading via
+   `SingboxFfi.openDefault()`.
 
 Dynamic linking is the recommended desktop path:
 
@@ -186,11 +204,13 @@ Platform notes:
 - Windows desktop: prefer `singboxffi.dll`; static linking a Go archive into
   Flutter's MSVC runner is possible only with extra native runner work and
   toolchain care.
-- Linux/macOS desktop: static linking works through the native runner build, but
-  a shared library is simpler to package and update.
-- Android: package ABI-specific `.so` files through a Flutter FFI plugin.
-- iOS: static archive or framework linking should be provided by a Flutter FFI
-  plugin; only then can `SingboxFfi.process()` resolve native symbols.
+- Linux desktop: package `libsingboxffi.so` through CMake.
+- macOS desktop: package `libsingboxffi.dylib` by default. Static
+  archive/framework builds are supported, but app code should call
+  `SingboxFfi.process()` only for those builds.
+- Android: package ABI-specific `.so` files through the Flutter FFI plugin.
+- iOS: link a static archive or framework through CocoaPods; `openBundled()`
+  uses `DynamicLibrary.process()` so Dart can resolve `sb_version`.
 
 Mobile and static mode are handled by the Flutter FFI plugin scaffolding in
 this package. It owns Windows/macOS/Linux native library linking or packaging,

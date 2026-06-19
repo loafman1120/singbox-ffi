@@ -144,6 +144,10 @@ class SingboxRawBindings {
     return SingboxRawBindings(SingboxFfi.openDefaultLibrary(path));
   }
 
+  factory SingboxRawBindings.openBundled([String? path]) {
+    return SingboxRawBindings(SingboxFfi.openBundledLibrary(path));
+  }
+
   factory SingboxRawBindings.process() {
     return SingboxRawBindings(DynamicLibrary.process());
   }
@@ -212,6 +216,10 @@ class SingboxFfi {
     return SingboxFfi._(SingboxRawBindings.openDefault(path));
   }
 
+  factory SingboxFfi.openBundled([String? path]) {
+    return SingboxFfi._(SingboxRawBindings.openBundled(path));
+  }
+
   factory SingboxFfi.process() {
     return SingboxFfi._(SingboxRawBindings.process());
   }
@@ -259,6 +267,16 @@ class SingboxFfi {
         '${lastError ?? error}',
       );
     }
+  }
+
+  static DynamicLibrary openBundledLibrary([String? path]) {
+    if (path != null && path.isNotEmpty) {
+      return DynamicLibrary.open(path);
+    }
+    if (Platform.isIOS) {
+      return DynamicLibrary.process();
+    }
+    return openDefaultLibrary();
   }
 
   static String _joinPath(String directory, String fileName) {

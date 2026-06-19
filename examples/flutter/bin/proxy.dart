@@ -33,7 +33,7 @@ const _configJson = '''
 
 Future<void> main(List<String> args) async {
   final libraryPath = args.isEmpty ? null : args.first;
-  final singbox = SingboxFfi.openDefault(libraryPath);
+  final singbox = SingboxFfi.openBundled(libraryPath);
 
   print('sing-box version: ${singbox.version()}');
   print('go version: ${singbox.goVersion()}');

@@ -1,4 +1,6 @@
 Pod::Spec.new do |s|
+  force_load_archive = File.exist?(File.join(__dir__, 'Libraries', 'libsingboxffi.a'))
+
   s.name             = 'singbox_ffi'
   s.version          = '0.1.0'
   s.summary          = 'Flutter FFI packaging for the singbox-ffi native core.'
@@ -10,10 +12,10 @@ Pod::Spec.new do |s|
   s.source_files     = 'Classes/**/*'
   s.public_header_files = 'Classes/**/*.h'
   s.vendored_libraries = ['Libraries/**/*.a']
-  s.vendored_frameworks = ['Frameworks/**/*.framework']
+  s.vendored_frameworks = ['Frameworks/**/*.framework', 'Frameworks/**/*.xcframework']
   s.platform = :ios, '12.0'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'OTHER_LDFLAGS' => '$(inherited) -lc++'
+    'OTHER_LDFLAGS' => '$(inherited) -lc++' + (force_load_archive ? ' -force_load "$(PODS_TARGET_SRCROOT)/Libraries/libsingboxffi.a"' : '')
   }
 end

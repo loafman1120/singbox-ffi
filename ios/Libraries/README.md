@@ -6,6 +6,7 @@ Place the iOS static archive here before publishing or consuming the plugin:
 ios/Libraries/libsingboxffi.a
 ```
 
-Alternatively, place a framework under `ios/Frameworks/`. The podspec links
-vendored archives/frameworks into the app so `SingboxFfi.process()` can resolve
-symbols such as `sb_version`.
+The podspec force-loads this archive so symbols such as `sb_version` remain
+visible to `DynamicLibrary.process()`.
+
+Alternatively, place a framework or xcframework under `ios/Frameworks/`.

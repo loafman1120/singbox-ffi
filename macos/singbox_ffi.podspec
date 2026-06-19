@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   s.source_files     = 'Classes/**/*'
   s.public_header_files = 'Classes/**/*.h'
   s.vendored_libraries = ['Libraries/**/*.a', 'Libraries/**/*.dylib']
-  s.vendored_frameworks = ['Frameworks/**/*.framework']
+  s.vendored_frameworks = ['Frameworks/**/*.framework', 'Frameworks/**/*.xcframework']
   s.platform = :osx, '10.14'
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',

@@ -28,5 +28,9 @@ configuration.json
 !macos/Classes/**/*.h
 !ios/Frameworks/**/*.framework/
 !ios/Frameworks/**/*.framework/**
+!ios/Frameworks/**/*.xcframework/
+!ios/Frameworks/**/*.xcframework/**
 !macos/Frameworks/**/*.framework/
 !macos/Frameworks/**/*.framework/**
+!macos/Frameworks/**/*.xcframework/
+!macos/Frameworks/**/*.xcframework/**
