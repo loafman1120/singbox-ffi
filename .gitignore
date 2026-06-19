@@ -1,0 +1,12 @@
+build/
+dist/
+.gocache/
+*.dll
+*.h
+*.so
+*.dylib
+*.a
+*.exe
+*.test
+*.out
+*.log
