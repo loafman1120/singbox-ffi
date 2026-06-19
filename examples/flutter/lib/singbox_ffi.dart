@@ -29,60 +29,132 @@ final class SbInitOptions extends Struct {
   external int oomMemoryLimit;
 }
 
-typedef _SbVersionNative = Pointer<Utf8> Function();
-typedef _SbVersionDart = Pointer<Utf8> Function();
+typedef SbHandle = int;
 
-typedef _SbGoVersionNative = Pointer<Utf8> Function();
-typedef _SbGoVersionDart = Pointer<Utf8> Function();
+typedef SbVersionNative = Pointer<Utf8> Function();
+typedef SbVersionDart = Pointer<Utf8> Function();
 
-typedef _SbFreeStringNative = Void Function(Pointer<Utf8>);
-typedef _SbFreeStringDart = void Function(Pointer<Utf8>);
+typedef SbGoVersionNative = Pointer<Utf8> Function();
+typedef SbGoVersionDart = Pointer<Utf8> Function();
 
-typedef _SbInitNative = Int32 Function(
+typedef SbFreeStringNative = Void Function(Pointer<Utf8>);
+typedef SbFreeStringDart = void Function(Pointer<Utf8>);
+
+typedef SbInitNative = Int32 Function(
   Pointer<SbInitOptions>,
   Pointer<Pointer<Utf8>>,
 );
-typedef _SbInitDart = int Function(
+typedef SbInitDart = int Function(
   Pointer<SbInitOptions>,
   Pointer<Pointer<Utf8>>,
 );
 
-typedef _SbCheckConfigNative = Int32 Function(
+typedef SbCheckConfigNative = Int32 Function(
   Pointer<Utf8>,
   Pointer<Pointer<Utf8>>,
 );
-typedef _SbCheckConfigDart = int Function(
+typedef SbCheckConfigDart = int Function(
   Pointer<Utf8>,
   Pointer<Pointer<Utf8>>,
 );
 
-typedef _SbStartNative = Int32 Function(
+typedef SbStartNative = Int32 Function(
   Pointer<Utf8>,
   Pointer<Uint64>,
   Pointer<Pointer<Utf8>>,
 );
-typedef _SbStartDart = int Function(
+typedef SbStartDart = int Function(
   Pointer<Utf8>,
   Pointer<Uint64>,
   Pointer<Pointer<Utf8>>,
 );
 
-typedef _SbReloadNative = Int32 Function(
+typedef SbReloadNative = Int32 Function(
   Uint64,
   Pointer<Utf8>,
   Pointer<Pointer<Utf8>>,
 );
-typedef _SbReloadDart = int Function(
+typedef SbReloadDart = int Function(
   int,
   Pointer<Utf8>,
   Pointer<Pointer<Utf8>>,
 );
 
-typedef _SbStopNative = Int32 Function(Uint64, Pointer<Pointer<Utf8>>);
-typedef _SbStopDart = int Function(int, Pointer<Pointer<Utf8>>);
+typedef SbStopNative = Int32 Function(Uint64, Pointer<Pointer<Utf8>>);
+typedef SbStopDart = int Function(int, Pointer<Pointer<Utf8>>);
 
-typedef _SbFreeHandleNative = Int32 Function(Uint64);
-typedef _SbFreeHandleDart = int Function(int);
+typedef SbFreeHandleNative = Int32 Function(Uint64);
+typedef SbFreeHandleDart = int Function(int);
+
+final class SingboxNativeSymbols {
+  const SingboxNativeSymbols._();
+
+  static const version = 'sb_version';
+  static const goVersion = 'sb_go_version';
+  static const freeString = 'sb_free_string';
+  static const init = 'sb_init';
+  static const checkConfig = 'sb_check_config';
+  static const start = 'sb_start';
+  static const reload = 'sb_reload';
+  static const stop = 'sb_stop';
+  static const freeHandle = 'sb_free_handle';
+}
+
+class SingboxRawBindings {
+  SingboxRawBindings(this.library)
+      : sbVersion = library.lookupFunction<SbVersionNative, SbVersionDart>(
+          SingboxNativeSymbols.version,
+        ),
+        sbGoVersion =
+            library.lookupFunction<SbGoVersionNative, SbGoVersionDart>(
+          SingboxNativeSymbols.goVersion,
+        ),
+        sbFreeString =
+            library.lookupFunction<SbFreeStringNative, SbFreeStringDart>(
+          SingboxNativeSymbols.freeString,
+        ),
+        sbInit = library.lookupFunction<SbInitNative, SbInitDart>(
+          SingboxNativeSymbols.init,
+        ),
+        sbCheckConfig =
+            library.lookupFunction<SbCheckConfigNative, SbCheckConfigDart>(
+          SingboxNativeSymbols.checkConfig,
+        ),
+        sbStart = library.lookupFunction<SbStartNative, SbStartDart>(
+          SingboxNativeSymbols.start,
+        ),
+        sbReload = library.lookupFunction<SbReloadNative, SbReloadDart>(
+          SingboxNativeSymbols.reload,
+        ),
+        sbStop = library.lookupFunction<SbStopNative, SbStopDart>(
+          SingboxNativeSymbols.stop,
+        ),
+        sbFreeHandle =
+            library.lookupFunction<SbFreeHandleNative, SbFreeHandleDart>(
+          SingboxNativeSymbols.freeHandle,
+        );
+
+  factory SingboxRawBindings.open([String? path]) {
+    return SingboxRawBindings(
+      DynamicLibrary.open(path ?? SingboxFfi.defaultLibraryName),
+    );
+  }
+
+  factory SingboxRawBindings.process() {
+    return SingboxRawBindings(DynamicLibrary.process());
+  }
+
+  final DynamicLibrary library;
+  final SbVersionDart sbVersion;
+  final SbGoVersionDart sbGoVersion;
+  final SbFreeStringDart sbFreeString;
+  final SbInitDart sbInit;
+  final SbCheckConfigDart sbCheckConfig;
+  final SbStartDart sbStart;
+  final SbReloadDart sbReload;
+  final SbStopDart sbStop;
+  final SbFreeHandleDart sbFreeHandle;
+}
 
 class SingboxException implements Exception {
   SingboxException(this.message);
@@ -122,39 +194,18 @@ class SingboxInitOptions {
 }
 
 class SingboxFfi {
-  SingboxFfi._(this._lib)
-      : _sbVersion = _lib.lookupFunction<_SbVersionNative, _SbVersionDart>(
-          'sb_version',
-        ),
-        _sbGoVersion =
-            _lib.lookupFunction<_SbGoVersionNative, _SbGoVersionDart>(
-          'sb_go_version',
-        ),
-        _sbFreeString =
-            _lib.lookupFunction<_SbFreeStringNative, _SbFreeStringDart>(
-          'sb_free_string',
-        ),
-        _sbInit = _lib.lookupFunction<_SbInitNative, _SbInitDart>('sb_init'),
-        _sbCheckConfig =
-            _lib.lookupFunction<_SbCheckConfigNative, _SbCheckConfigDart>(
-          'sb_check_config',
-        ),
-        _sbStart = _lib.lookupFunction<_SbStartNative, _SbStartDart>(
-          'sb_start',
-        ),
-        _sbReload = _lib.lookupFunction<_SbReloadNative, _SbReloadDart>(
-          'sb_reload',
-        ),
-        _sbStop = _lib.lookupFunction<_SbStopNative, _SbStopDart>(
-          'sb_stop',
-        ),
-        _sbFreeHandle =
-            _lib.lookupFunction<_SbFreeHandleNative, _SbFreeHandleDart>(
-          'sb_free_handle',
-        );
+  SingboxFfi._(this.raw);
+
+  factory SingboxFfi.fromLibrary(DynamicLibrary library) {
+    return SingboxFfi._(SingboxRawBindings(library));
+  }
 
   factory SingboxFfi.open([String? path]) {
-    return SingboxFfi._(DynamicLibrary.open(path ?? defaultLibraryName));
+    return SingboxFfi._(SingboxRawBindings.open(path));
+  }
+
+  factory SingboxFfi.process() {
+    return SingboxFfi._(SingboxRawBindings.process());
   }
 
   static String get defaultLibraryName {
@@ -167,20 +218,11 @@ class SingboxFfi {
     return 'libsingboxffi.so';
   }
 
-  final DynamicLibrary _lib;
-  final _SbVersionDart _sbVersion;
-  final _SbGoVersionDart _sbGoVersion;
-  final _SbFreeStringDart _sbFreeString;
-  final _SbInitDart _sbInit;
-  final _SbCheckConfigDart _sbCheckConfig;
-  final _SbStartDart _sbStart;
-  final _SbReloadDart _sbReload;
-  final _SbStopDart _sbStop;
-  final _SbFreeHandleDart _sbFreeHandle;
+  final SingboxRawBindings raw;
 
-  String version() => _takeString(_sbVersion());
+  String version() => takeString(raw.sbVersion());
 
-  String goVersion() => _takeString(_sbGoVersion());
+  String goVersion() => takeString(raw.sbGoVersion());
 
   void init([SingboxInitOptions options = const SingboxInitOptions()]) {
     final opts = calloc<SbInitOptions>();
@@ -210,9 +252,9 @@ class SingboxFfi {
         ..oomKillerDisabled = options.oomKillerDisabled
         ..oomMemoryLimit = options.oomMemoryLimit;
 
-      final code = _sbInit(opts, errOut);
+      final code = raw.sbInit(opts, errOut);
       if (code != 0) {
-        throw SingboxException(_takeError(errOut));
+        throw SingboxException(takeError(errOut));
       }
     } finally {
       for (final pointer in allocations) {
@@ -227,9 +269,9 @@ class SingboxFfi {
     final config = configJson.toNativeUtf8(allocator: calloc);
     final errOut = calloc<Pointer<Utf8>>();
     try {
-      final code = _sbCheckConfig(config, errOut);
+      final code = raw.sbCheckConfig(config, errOut);
       if (code != 0) {
-        throw SingboxException(_takeError(errOut));
+        throw SingboxException(takeError(errOut));
       }
     } finally {
       calloc.free(config);
@@ -242,9 +284,9 @@ class SingboxFfi {
     final handleOut = calloc<Uint64>();
     final errOut = calloc<Pointer<Utf8>>();
     try {
-      final code = _sbStart(config, handleOut, errOut);
+      final code = raw.sbStart(config, handleOut, errOut);
       if (code != 0) {
-        throw SingboxException(_takeError(errOut));
+        throw SingboxException(takeError(errOut));
       }
       return SingboxService._(this, handleOut.value);
     } finally {
@@ -254,13 +296,13 @@ class SingboxFfi {
     }
   }
 
-  void reload(int handle, String configJson) {
+  void reload(SbHandle handle, String configJson) {
     final config = configJson.toNativeUtf8(allocator: calloc);
     final errOut = calloc<Pointer<Utf8>>();
     try {
-      final code = _sbReload(handle, config, errOut);
+      final code = raw.sbReload(handle, config, errOut);
       if (code != 0) {
-        throw SingboxException(_takeError(errOut));
+        throw SingboxException(takeError(errOut));
       }
     } finally {
       calloc.free(config);
@@ -268,42 +310,48 @@ class SingboxFfi {
     }
   }
 
-  void stop(int handle) {
+  void stop(SbHandle handle) {
     final errOut = calloc<Pointer<Utf8>>();
     try {
-      final code = _sbStop(handle, errOut);
+      final code = raw.sbStop(handle, errOut);
       if (code != 0) {
-        throw SingboxException(_takeError(errOut));
+        throw SingboxException(takeError(errOut));
       }
     } finally {
       calloc.free(errOut);
     }
   }
 
-  void freeHandle(int handle) {
-    final code = _sbFreeHandle(handle);
+  void freeHandle(SbHandle handle) {
+    final code = raw.sbFreeHandle(handle);
     if (code != 0) {
       throw SingboxException('invalid handle');
     }
   }
 
-  String _takeString(Pointer<Utf8> pointer) {
+  void freeString(Pointer<Utf8> pointer) {
+    if (pointer != nullptr) {
+      raw.sbFreeString(pointer);
+    }
+  }
+
+  String takeString(Pointer<Utf8> pointer) {
     if (pointer == nullptr) {
       return '';
     }
     try {
       return pointer.toDartString();
     } finally {
-      _sbFreeString(pointer);
+      freeString(pointer);
     }
   }
 
-  String _takeError(Pointer<Pointer<Utf8>> errOut) {
+  String takeError(Pointer<Pointer<Utf8>> errOut) {
     final pointer = errOut.value;
     if (pointer == nullptr) {
       return 'unknown error';
     }
-    return _takeString(pointer);
+    return takeString(pointer);
   }
 }
 
@@ -311,7 +359,7 @@ class SingboxService {
   SingboxService._(this._ffi, this.handle);
 
   final SingboxFfi _ffi;
-  final int handle;
+  final SbHandle handle;
   bool _closed = false;
 
   void reload(String configJson) {

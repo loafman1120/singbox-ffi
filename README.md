@@ -65,6 +65,94 @@ curl.exe -x socks5h://127.0.0.1:2080 https://example.com
 
 Press `Ctrl+C` in the Dart process to stop the proxy.
 
+## Dart Exports
+
+`examples/flutter/lib/singbox_ffi.dart` exports every native symbol in two
+layers.
+
+Raw C ABI bindings:
+
+```dart
+SbHandle
+SbInitOptions
+
+SbVersionNative / SbVersionDart
+SbGoVersionNative / SbGoVersionDart
+SbFreeStringNative / SbFreeStringDart
+SbInitNative / SbInitDart
+SbCheckConfigNative / SbCheckConfigDart
+SbStartNative / SbStartDart
+SbReloadNative / SbReloadDart
+SbStopNative / SbStopDart
+SbFreeHandleNative / SbFreeHandleDart
+
+SingboxNativeSymbols
+SingboxRawBindings
+```
+
+High-level Dart API:
+
+```dart
+SingboxFfi.open([path])
+SingboxFfi.fromLibrary(library)
+SingboxFfi.process()
+SingboxFfi.defaultLibraryName
+SingboxFfi.raw
+SingboxFfi.version()
+SingboxFfi.goVersion()
+SingboxFfi.init([options])
+SingboxFfi.checkConfig(configJson)
+SingboxFfi.start(configJson)
+SingboxFfi.reload(handle, configJson)
+SingboxFfi.stop(handle)
+SingboxFfi.freeHandle(handle)
+SingboxFfi.freeString(pointer)
+SingboxFfi.takeString(pointer)
+SingboxFfi.takeError(errOut)
+
+SingboxInitOptions
+SingboxService.handle
+SingboxService.reload(configJson)
+SingboxService.close()
+SingboxException
+```
+
+## Static Linking
+
+Dynamic linking is the recommended desktop path:
+
+```dart
+final core = SingboxFfi.open('singboxffi.dll');
+```
+
+Static linking is possible, but the native library must be linked into the
+Flutter runner, app executable, or a platform plugin first. Then use:
+
+```dart
+final core = SingboxFfi.process();
+```
+
+Build a static C archive instead of a dynamic library:
+
+```powershell
+go build -trimpath -buildmode=c-archive `
+  -tags "with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_purego,with_clash_api,badlinkname,tfogo_checklinkname0" `
+  -ldflags "-s -w -buildid= -checklinkname=0" `
+  -o build\singboxffi.a .
+```
+
+Platform notes:
+
+- Windows desktop: prefer `singboxffi.dll`; static linking a Go archive into
+  Flutter's MSVC runner is possible only with extra native runner work and
+  toolchain care.
+- Linux/macOS desktop: static linking works through the native runner build, but
+  a shared library is simpler to package and update.
+- Android: link the Go archive into a plugin/shared object per ABI; Flutter
+  still packages native code inside the APK/AAB.
+- iOS: static linking is the normal route; expose symbols to the process and
+  use `SingboxFfi.process()`.
+
 ## ABI
 
 ```c
