@@ -5,8 +5,8 @@ small C ABI wrapper around `github.com/sagernet/sing-box/experimental/libbox`
 and publishes native artifacts for GUI apps to download.
 
 LitheNet should not compile this Go code directly. Its Flutter build should
-download a prebuilt `singbox-ffi` artifact, copy the native library into the app
-bundle, and build only the Flutter UI.
+depend on this Flutter FFI plugin, use prebuilt `singbox-ffi` artifacts, and
+build only the Flutter UI.
 
 ## Outputs
 
@@ -35,6 +35,25 @@ Static archive builds for iOS, Android, and advanced desktop integrations use
 the same native ABI and should publish platform-specific `singboxffi.a`
 artifacts alongside the generated header.
 
+## Flutter FFI Plugin
+
+The repository root is now a publishable Flutter FFI plugin named
+`singbox_ffi`. The plugin owns platform packaging and linking for the native
+artifacts:
+
+- Windows: bundle `windows/artifacts/x64/singboxffi.dll`.
+- Linux: bundle `linux/artifacts/x86_64/libsingboxffi.so`.
+- macOS: link/package `macos/Libraries/libsingboxffi.dylib`,
+  `macos/Libraries/libsingboxffi.a`, or a vendored framework.
+- Android: package ABI-specific `.so` files from
+  `android/src/main/jniLibs/<abi>/libsingboxffi.so`.
+- iOS: link `ios/Libraries/libsingboxffi.a` or a vendored framework so
+  `DynamicLibrary.process()` can resolve native symbols.
+
+The package expects prebuilt native artifacts to be generated before publishing
+or consuming the plugin. Flutter build files intentionally fail fast when a
+desktop artifact is missing.
+
 ## Build Locally
 
 Windows with MSYS2 UCRT64 GCC:
@@ -56,9 +75,9 @@ The Dart example proves the FFI can start a real local `mixed` proxy on
 `127.0.0.1:2080`.
 
 ```powershell
-dart pub get
+flutter pub get
 cd examples\flutter
-dart pub get
+flutter pub get
 dart run bin\proxy.dart ..\..\build\singboxffi.dll
 ```
 
@@ -141,7 +160,7 @@ final core = SingboxFfi.openDefault('singboxffi.dll');
 5. The platform loader default via `DynamicLibrary.open(defaultLibraryName)`.
 
 Static linking is possible, but `SingboxFfi.process()` is not a normal fallback
-mode for this plain Dart package. It only works after the native library has
+mode for the Dart API alone. It only works after the native library has
 already been linked into the Flutter runner, app executable, or platform plugin
 so that symbols such as `sb_version` are visible in the process. Then use:
 
@@ -173,11 +192,11 @@ Platform notes:
 - iOS: static archive or framework linking should be provided by a Flutter FFI
   plugin; only then can `SingboxFfi.process()` resolve native symbols.
 
-The next stage for mobile and static mode is to upgrade `singbox_ffi` from a
-plain Dart package to a Flutter FFI plugin. That plugin should own
-Windows/macOS/Linux native library linking or packaging, Android ABI `.so`
-packaging, iOS/macOS static archive or framework linking, and the platform
-setup required for `DynamicLibrary.process()` to find `sb_version`.
+Mobile and static mode are handled by the Flutter FFI plugin scaffolding in
+this package. It owns Windows/macOS/Linux native library linking or packaging,
+Android ABI `.so` packaging, iOS/macOS static archive or framework linking, and
+the platform setup required for `DynamicLibrary.process()` to find
+`sb_version`.
 
 ## ABI
 
@@ -208,8 +227,8 @@ returned by `sb_start` must be stopped and released with `sb_stop` and
 
 ## Dart Package Layout
 
-The repository root is the `singbox_ffi` Dart package. LitheNet should depend
-on it directly:
+The repository root is the `singbox_ffi` Flutter FFI plugin. LitheNet should
+depend on it directly:
 
 ```yaml
 dependencies:
@@ -218,7 +237,7 @@ dependencies:
 ```
 
 `examples/flutter` is only a smoke/example package. It depends on the root
-package with `path: ../..` and should not be consumed as the public API.
+plugin with `path: ../..` and should not be consumed as the public API.
 
 ## Status
 

@@ -1,0 +1,12 @@
+.agents/
+.codex/
+.github/
+.gocache/
+build/
+dist/
+cache.db
+configuration.json
+CrashReport-*.log
+*.exe
+*.test
+*.out

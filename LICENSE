@@ -1,0 +1,8 @@
+This package is distributed under the GNU General Public License, version 3 or
+later, because it links against github.com/sagernet/sing-box/experimental/libbox.
+
+The upstream sing-box license notice and naming restriction are included in
+LICENSE.sing-box. Distributors of this wrapper, linked binaries, and
+applications embedding the produced native library should carry the
+corresponding GPL notice and must not use the sing-box name or imply association
+with the upstream application without prior consent.
