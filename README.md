@@ -31,6 +31,10 @@ libsingboxffi.dylib
 singboxffi.h
 ```
 
+Static archive builds for iOS, Android, and advanced desktop integrations use
+the same native ABI and should publish platform-specific `singboxffi.a`
+artifacts alongside the generated header.
+
 ## Build Locally
 
 Windows with MSYS2 UCRT64 GCC:
@@ -52,6 +56,7 @@ The Dart example proves the FFI can start a real local `mixed` proxy on
 `127.0.0.1:2080`.
 
 ```powershell
+dart pub get
 cd examples\flutter
 dart pub get
 dart run bin\proxy.dart ..\..\build\singboxffi.dll
@@ -67,8 +72,7 @@ Press `Ctrl+C` in the Dart process to stop the proxy.
 
 ## Dart Exports
 
-`examples/flutter/lib/singbox_ffi.dart` exports every native symbol in two
-layers.
+`lib/singbox_ffi.dart` exports every native symbol in two layers.
 
 Raw C ABI bindings:
 
@@ -179,6 +183,20 @@ returned by `sb_start` must be stopped and released with `sb_stop` and
 
 - `loafman1120/singbox-ffi`: builds and releases native core artifacts.
 - `loafman1120/LitheNet`: Flutter GUI app; downloads `singbox-ffi` artifacts.
+
+## Dart Package Layout
+
+The repository root is the `singbox_ffi` Dart package. LitheNet should depend
+on it directly:
+
+```yaml
+dependencies:
+  singbox_ffi:
+    path: ../singbox-ffi
+```
+
+`examples/flutter` is only a smoke/example package. It depends on the root
+package with `path: ../..` and should not be consumed as the public API.
 
 ## Status
 

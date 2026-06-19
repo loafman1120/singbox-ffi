@@ -1,4 +1,4 @@
-import 'package:singbox_ffi_example/singbox_ffi.dart';
+import 'package:singbox_ffi/singbox_ffi.dart';
 
 const _configJson = '''
 {
