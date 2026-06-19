@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:lithenet_ffi_example/singbox_ffi.dart';
+import 'package:singbox_ffi_example/singbox_ffi.dart';
 
 const _listen = '127.0.0.1';
 const _port = 2080;

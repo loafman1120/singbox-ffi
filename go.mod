@@ -1,4 +1,4 @@
-module github.com/loafman1120/LitheNet
+module github.com/loafman1120/singbox-ffi
 
 go 1.26
 

@@ -1,237 +1,43 @@
-name: Build
+name: Build singbox-ffi
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - "v*"
+    branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: read
-
-concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  GOFLAGS: -buildvcs=false -trimpath
-  DESKTOP_TAGS: with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_purego,with_clash_api,badlinkname,tfogo_checklinkname0
-  ANDROID_TAGS: with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_purego,with_clash_api,badlinkname,tfogo_checklinkname0
-  LDFLAGS: -s -w -buildid= -checklinkname=0
-
 jobs:
-  desktop:
-    name: Desktop ${{ matrix.target }}
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: windows-amd64
-            runner: windows-2025
-            goos: windows
-            goarch: amd64
-            output: build/singboxffi.dll
-            header: build/singboxffi.h
-
-          - target: linux-amd64
-            runner: ubuntu-24.04
-            goos: linux
-            goarch: amd64
-            output: build/libsingboxffi.so
-            header: build/libsingboxffi.h
-
-          - target: linux-arm64
-            runner: ubuntu-24.04-arm
-            goos: linux
-            goarch: arm64
-            output: build/libsingboxffi.so
-            header: build/libsingboxffi.h
-
-          - target: macos-amd64
-            runner: macos-15-intel
-            goos: darwin
-            goarch: amd64
-            output: build/libsingboxffi.dylib
-            header: build/libsingboxffi.h
-
-          - target: macos-arm64
-            runner: macos-15
-            goos: darwin
-            goarch: arm64
-            output: build/libsingboxffi.dylib
-            header: build/libsingboxffi.h
-
+  windows:
+    runs-on: windows-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
-          cache: true
+          go-version: "1.26.x"
 
-      - name: Setup MSYS2 UCRT64 GCC
-        if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
+      - uses: msys2/setup-msys2@v2
         with:
-          update: true
           msystem: UCRT64
-          path-type: inherit
-          install: >-
-            mingw-w64-ucrt-x86_64-gcc
+          update: true
+          install: mingw-w64-ucrt-x86_64-gcc
 
-      - name: Build shared library
-        if: runner.os == 'Windows'
+      - name: Build DLL
         shell: pwsh
-        env:
-          CGO_ENABLED: "1"
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CC: gcc
         run: |
-          $env:Path = "C:\msys64\ucrt64\bin;$env:Path"
+          $env:CGO_ENABLED = "1"
+          $env:CC = "C:\msys64\ucrt64\bin\gcc.exe"
+          $env:PATH = "C:\msys64\ucrt64\bin;$env:PATH"
           New-Item -ItemType Directory -Force build | Out-Null
-          go build -buildmode=c-shared `
-            -tags "$env:DESKTOP_TAGS" `
-            -ldflags "$env:LDFLAGS" `
-            -o "${{ matrix.output }}" .
+          go build -trimpath -buildmode=c-shared `
+            -tags "with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_purego,with_clash_api,badlinkname,tfogo_checklinkname0" `
+            -ldflags "-s -w -buildid= -checklinkname=0" `
+            -o build\singboxffi.dll .
 
-      - name: Build shared library
-        if: runner.os != 'Windows'
-        shell: bash
-        env:
-          CGO_ENABLED: "1"
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: |
-          set -euo pipefail
-          mkdir -p build
-          go build -buildmode=c-shared \
-            -tags "${DESKTOP_TAGS}" \
-            -ldflags "${LDFLAGS}" \
-            -o "${{ matrix.output }}" .
-
-      - name: Inspect artifacts
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Get-ChildItem "${{ matrix.output }}", "${{ matrix.header }}" | Format-Table Name, Length, LastWriteTime
-          Select-String -Path "${{ matrix.header }}" -Pattern "sb_version|sb_go_version|sb_init|sb_check_config|sb_free_string"
-
-      - name: Inspect artifacts
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          set -euo pipefail
-          ls -lh "${{ matrix.output }}" "${{ matrix.header }}"
-          file "${{ matrix.output }}"
-          grep -E "sb_version|sb_go_version|sb_init|sb_check_config|sb_free_string" "${{ matrix.header }}"
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: singboxffi-${{ matrix.target }}
+          name: singbox-ffi-windows-x64
           path: |
-            ${{ matrix.output }}
-            ${{ matrix.header }}
-          if-no-files-found: error
-
-  android:
-    name: Android ${{ matrix.target }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: android-arm64-v8a
-            abi: arm64-v8a
-            goarch: arm64
-            goarm: ""
-            cc: aarch64-linux-android
-
-          - target: android-armeabi-v7a
-            abi: armeabi-v7a
-            goarch: arm
-            goarm: "7"
-            cc: armv7a-linux-androideabi
-
-          - target: android-x86_64
-            abi: x86_64
-            goarch: amd64
-            goarm: ""
-            cc: x86_64-linux-android
-
-          - target: android-x86
-            abi: x86
-            goarch: 386
-            goarm: ""
-            cc: i686-linux-android
-
-    env:
-      NDK_VERSION: 27.2.12479018
-      ANDROID_API: "23"
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Install Android NDK
-        shell: bash
-        run: |
-          set -euo pipefail
-          set +o pipefail
-          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "ndk;${NDK_VERSION}"
-          sdkmanager_status="${PIPESTATUS[1]}"
-          set -o pipefail
-          if [ "${sdkmanager_status}" -ne 0 ]; then
-            exit "${sdkmanager_status}"
-          fi
-          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "${GITHUB_ENV}"
-
-      - name: Build JNI shared library
-        shell: bash
-        env:
-          CGO_ENABLED: "1"
-          GOOS: android
-          GOARCH: ${{ matrix.goarch }}
-          GOARM: ${{ matrix.goarm }}
-        run: |
-          set -euo pipefail
-          export CC="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/${{ matrix.cc }}${ANDROID_API}-clang"
-          mkdir -p "build/android/${{ matrix.abi }}"
-          go build -buildmode=c-shared \
-            -tags "${ANDROID_TAGS}" \
-            -ldflags "${LDFLAGS}" \
-            -o "build/android/${{ matrix.abi }}/libsingboxffi.so" .
-
-      - name: Inspect artifacts
-        shell: bash
-        run: |
-          set -euo pipefail
-          ls -lh "build/android/${{ matrix.abi }}/libsingboxffi.so" "build/android/${{ matrix.abi }}/libsingboxffi.h"
-          file "build/android/${{ matrix.abi }}/libsingboxffi.so"
-          grep -E "sb_version|sb_go_version|sb_init|sb_check_config|sb_free_string" "build/android/${{ matrix.abi }}/libsingboxffi.h"
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: singboxffi-${{ matrix.target }}
-          path: |
-            build/android/${{ matrix.abi }}/libsingboxffi.so
-            build/android/${{ matrix.abi }}/libsingboxffi.h
-          if-no-files-found: error
+            build/singboxffi.dll
+            build/singboxffi.h

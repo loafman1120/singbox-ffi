@@ -1,5 +1,5 @@
-name: lithenet_ffi_example
-description: Dart FFI bindings and proxy runner for LitheNet Core.
+name: singbox_ffi_example
+description: Dart FFI bindings and proxy runner for singbox-ffi.
 version: 0.1.0
 publish_to: none
 

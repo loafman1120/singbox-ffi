@@ -1,20 +1,37 @@
-# LitheNet
+# singbox-ffi
 
-LitheNet is a lightweight Flutter proxy client core powered by sing-box. It uses
-a small C ABI around `github.com/sagernet/sing-box/experimental/libbox`, then
-loads that native library from Dart with `dart:ffi`.
+`singbox-ffi` is the native core package for apps such as LitheNet. It builds a
+small C ABI wrapper around `github.com/sagernet/sing-box/experimental/libbox`
+and publishes native artifacts for GUI apps to download.
 
-This repository is the first usable slice of the product: build the native core,
-run a Dart process, and get a real local `mixed` proxy on `127.0.0.1:2080`.
+LitheNet should not compile this Go code directly. Its Flutter build should
+download a prebuilt `singbox-ffi` artifact, copy the native library into the app
+bundle, and build only the Flutter UI.
 
-## Why
+## Outputs
 
-- Flutter UI, native sing-box engine
-- Tiny and stable FFI boundary
-- No dependency on the unavailable upstream `sing-ffi` generator
-- Desktop-first local proxy mode before TUN/system-proxy work
+Windows:
 
-## Build Core
+```text
+singboxffi.dll
+singboxffi.h
+```
+
+Linux:
+
+```text
+libsingboxffi.so
+singboxffi.h
+```
+
+macOS:
+
+```text
+libsingboxffi.dylib
+singboxffi.h
+```
+
+## Build Locally
 
 Windows with MSYS2 UCRT64 GCC:
 
@@ -26,25 +43,18 @@ $env:PATH = "C:\msys64\ucrt64\bin;$env:PATH"
 go build -trimpath -buildmode=c-shared `
   -tags "with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_purego,with_clash_api,badlinkname,tfogo_checklinkname0" `
   -ldflags "-s -w -buildid= -checklinkname=0" `
-  -o build\lithenetcore.dll .
+  -o build\singboxffi.dll .
 ```
 
-Outputs:
+## Run The Dart Smoke Proxy
 
-```text
-build/lithenetcore.dll
-build/lithenetcore.h
-```
-
-Linux/macOS use the same `go build -buildmode=c-shared` flow and output
-`liblithenetcore.so` or `liblithenetcore.dylib`.
-
-## Run The Dart Proxy
+The Dart example proves the FFI can start a real local `mixed` proxy on
+`127.0.0.1:2080`.
 
 ```powershell
 cd examples\flutter
 dart pub get
-dart run bin\proxy.dart ..\..\build\lithenetcore.dll
+dart run bin\proxy.dart ..\..\build\singboxffi.dll
 ```
 
 In another terminal:
@@ -54,22 +64,6 @@ curl.exe -x socks5h://127.0.0.1:2080 https://example.com
 ```
 
 Press `Ctrl+C` in the Dart process to stop the proxy.
-
-## Flutter Integration
-
-Reuse `examples/flutter/lib/singbox_ffi.dart` in a Flutter desktop app:
-
-```dart
-final core = SingboxFfi.open('lithenetcore.dll');
-core.init();
-final service = core.start(configJson);
-
-// Later:
-service.close();
-```
-
-Ship the native library beside the Flutter executable, or pass an absolute path
-from your installer/app data directory.
 
 ## ABI
 
@@ -93,6 +87,11 @@ Strings returned by the core must be released with `sb_free_string`. Handles
 returned by `sb_start` must be stopped and released with `sb_stop` and
 `sb_free_handle`.
 
+## Repository Split
+
+- `loafman1120/singbox-ffi`: builds and releases native core artifacts.
+- `loafman1120/LitheNet`: Flutter GUI app; downloads `singbox-ffi` artifacts.
+
 ## Status
 
 Implemented:
@@ -100,16 +99,13 @@ Implemented:
 - config validation
 - local mixed/SOCKS/HTTP proxy start, reload, stop
 - desktop stub platform interface
-- Dart FFI binding
-- Dart proxy runner
+- C and Dart smoke examples
 
-Next:
+Not implemented in this core yet:
 
-- Flutter UI shell
-- profile import and subscription update
-- log/event draining
-- system proxy toggle
 - TUN mode
+- system proxy toggling
+- event/log draining
 
 ## License Notice
 

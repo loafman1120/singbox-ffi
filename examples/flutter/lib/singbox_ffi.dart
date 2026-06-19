@@ -159,12 +159,12 @@ class SingboxFfi {
 
   static String get defaultLibraryName {
     if (Platform.isWindows) {
-      return 'lithenetcore.dll';
+      return 'singboxffi.dll';
     }
     if (Platform.isMacOS || Platform.isIOS) {
-      return 'liblithenetcore.dylib';
+      return 'libsingboxffi.dylib';
     }
-    return 'liblithenetcore.so';
+    return 'libsingboxffi.so';
   }
 
   final DynamicLibrary _lib;

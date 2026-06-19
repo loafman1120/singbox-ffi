@@ -74,7 +74,7 @@ func sb_init(raw *C.sb_init_options, errOut **C.char) C.int32_t {
 		CommandServerSecret:     opts.commandSecret,
 		LogMaxLines:             int(opts.logMaxLines),
 		Debug:                   opts.debug,
-		CrashReportSource:       "LitheNet",
+		CrashReportSource:       "singbox-ffi",
 		OomKillerEnabled:        opts.oomKillerEnabled,
 		OomKillerDisabled:       opts.oomKillerDisabled,
 		OomMemoryLimit:          opts.oomMemoryLimit,
@@ -252,12 +252,12 @@ func (desktopCommandHandler) GetSystemProxyStatus() (*libbox.SystemProxyStatus, 
 	return &libbox.SystemProxyStatus{Available: false, Enabled: false}, nil
 }
 func (desktopCommandHandler) SetSystemProxyEnabled(bool) error {
-	return errors.New("system proxy is not implemented by LitheNet")
+	return errors.New("system proxy is not implemented by singbox-ffi")
 }
 func (desktopCommandHandler) TriggerNativeCrash() error { return errors.New("native crash disabled") }
 func (desktopCommandHandler) WriteDebugMessage(string)  {}
 func (desktopCommandHandler) ConnectSSHAgent() (int32, error) {
-	return 0, errors.New("ssh agent is not implemented by LitheNet")
+	return 0, errors.New("ssh agent is not implemented by singbox-ffi")
 }
 
 type desktopPlatform struct{}
@@ -266,11 +266,11 @@ func (desktopPlatform) LocalDNSTransport() libbox.LocalDNSTransport { return nil
 func (desktopPlatform) UsePlatformAutoDetectInterfaceControl() bool { return false }
 func (desktopPlatform) AutoDetectInterfaceControl(int32) error      { return nil }
 func (desktopPlatform) OpenTun(libbox.TunOptions) (int32, error) {
-	return 0, errors.New("tun is not implemented by LitheNet")
+	return 0, errors.New("tun is not implemented by singbox-ffi")
 }
 func (desktopPlatform) UseProcFS() bool { return false }
 func (desktopPlatform) FindConnectionOwner(int32, string, int32, string, int32) (*libbox.ConnectionOwner, error) {
-	return nil, errors.New("connection owner lookup is not implemented by LitheNet")
+	return nil, errors.New("connection owner lookup is not implemented by singbox-ffi")
 }
 func (desktopPlatform) StartDefaultInterfaceMonitor(libbox.InterfaceUpdateListener) error {
 	return nil
@@ -313,19 +313,19 @@ func (desktopPlatform) CloseNeighborMonitor(libbox.NeighborUpdateListener) error
 func (desktopPlatform) RegisterMyInterface(string)                               {}
 func (desktopPlatform) UsePlatformShell() bool                                   { return false }
 func (desktopPlatform) CheckPlatformShell() error {
-	return errors.New("platform shell is not implemented by LitheNet")
+	return errors.New("platform shell is not implemented by singbox-ffi")
 }
 func (desktopPlatform) OpenShellSession(*libbox.PlatformUser, string, libbox.StringIterator, string, int32, int32) (libbox.ShellSession, error) {
-	return nil, errors.New("platform shell is not implemented by LitheNet")
+	return nil, errors.New("platform shell is not implemented by singbox-ffi")
 }
 func (desktopPlatform) LookupUser(string) (*libbox.PlatformUser, error) {
-	return nil, errors.New("user lookup is not implemented by LitheNet")
+	return nil, errors.New("user lookup is not implemented by singbox-ffi")
 }
 func (desktopPlatform) LookupSFTPServer() (string, error) {
-	return "", errors.New("sftp is not implemented by LitheNet")
+	return "", errors.New("sftp is not implemented by singbox-ffi")
 }
 func (desktopPlatform) ReadSystemSSHHostKey() (string, error) {
-	return "", errors.New("ssh host key is not implemented by LitheNet")
+	return "", errors.New("ssh host key is not implemented by singbox-ffi")
 }
 func (desktopPlatform) TailscaleHostname() string { return "" }
 

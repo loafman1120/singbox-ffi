@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "lithenetcore.h"
+#include "singboxffi.h"
 
 static void print_owned_string(const char *label, char *value) {
     if (value == NULL) {
