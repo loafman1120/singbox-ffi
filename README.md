@@ -1,229 +1,171 @@
-# singbox-ffi
+# singbox_ffi
 
-`singbox-ffi` is the native core package for apps such as LitheNet. It builds a
-small C ABI wrapper around `github.com/sagernet/sing-box/experimental/libbox`
-and publishes native artifacts for GUI apps to download.
+Flutter/Dart FFI bindings for a small native wrapper around
+[`github.com/sagernet/sing-box/experimental/libbox`](https://github.com/SagerNet/sing-box).
 
-LitheNet should not compile this Go code directly. Its Flutter build should
-depend on this Flutter FFI plugin, use prebuilt `singbox-ffi` artifacts, and
-build only the Flutter UI.
+Use this package when a Flutter app needs to embed a sing-box core through FFI:
+validate sing-box JSON configuration, start a local proxy service, reload it,
+stop it, and query the native core version.
 
-## Outputs
+This package is intentionally only the Dart/Flutter plugin plus native packaging
+scaffolding. The large native libraries are distributed separately through this
+project's GitHub Releases.
 
-Windows:
+## What It Can Do
 
-```text
-singboxffi.dll
-singboxffi.h
+- Load a bundled or explicitly provided `singboxffi` native library.
+- Query the sing-box/libbox version and Go runtime version.
+- Initialize libbox with app paths, locale, command server options, logging
+  limits, debug mode, and OOM options.
+- Validate a sing-box JSON config before starting it.
+- Start a sing-box service from JSON config and receive an opaque handle.
+- Reload a running service with new JSON config.
+- Stop and free a running service handle.
+- Expose the same ABI to C, Dart raw FFI bindings, and a small Dart wrapper.
+
+The wrapper currently supports proxy-style sing-box configs such as local
+`mixed`, SOCKS, or HTTP inbounds with normal sing-box outbounds and routing.
+
+## Current Limits
+
+These platform integrations are not implemented by this wrapper yet:
+
+- TUN mode (`OpenTun` returns an unsupported error).
+- System proxy toggling.
+- Event or log draining APIs.
+- SSH agent, platform shell, SFTP, user lookup, and connection-owner lookup.
+
+If your app needs those features, treat this package as a lower-level starting
+point rather than a complete sing-box GUI runtime.
+
+## Install
+
+Add the package:
+
+```yaml
+dependencies:
+  singbox_ffi: ^0.1.0
 ```
 
-Linux:
+Then add the native artifact for each platform you build. The pub.dev package
+does not include native binaries.
 
-```text
-libsingboxffi.so
-singboxffi.h
-```
+| Platform | Expected artifact location |
+| --- | --- |
+| Windows | `windows/artifacts/x64/singboxffi.dll` |
+| Linux | `linux/artifacts/x86_64/libsingboxffi.so` |
+| macOS | `macos/Libraries/libsingboxffi.dylib`, `macos/Libraries/libsingboxffi.a`, or a vendored framework/xcframework |
+| Android | `android/src/main/jniLibs/<abi>/libsingboxffi.so` |
+| iOS | `ios/Libraries/libsingboxffi.a` or a vendored framework/xcframework |
 
-macOS:
+Download prebuilt artifacts from the matching GitHub Release, or build them
+locally from this repository. Desktop CMake files fail fast when a required
+desktop artifact is missing so the problem is visible during `flutter build`.
 
-```text
-libsingboxffi.dylib
-singboxffi.h
-```
-
-Static archive builds for iOS, Android, and advanced desktop integrations use
-the same native ABI and should publish platform-specific `singboxffi.a`
-artifacts alongside the generated header.
-
-## Flutter FFI Plugin
-
-The repository root is now a publishable Flutter FFI plugin named
-`singbox_ffi`. The plugin owns platform packaging and linking for the native
-artifacts:
-
-- Windows: bundle `windows/artifacts/x64/singboxffi.dll`.
-- Linux: bundle `linux/artifacts/x86_64/libsingboxffi.so`.
-- macOS: link/package `macos/Libraries/libsingboxffi.dylib`,
-  `macos/Libraries/libsingboxffi.a`, or a vendored framework/xcframework.
-- Android: package ABI-specific `.so` files from
-  `android/src/main/jniLibs/<abi>/libsingboxffi.so`.
-- iOS: link `ios/Libraries/libsingboxffi.a` or a vendored framework/xcframework so
-  `DynamicLibrary.process()` can resolve native symbols.
-
-The pub.dev package is intentionally lightweight and does not include native
-artifacts. Release builds attach a complete GitHub Release package containing
-the prebuilt artifacts. Flutter build files intentionally fail fast when a
-desktop artifact is missing.
-
-Apps that need batteries-included native artifacts should consume the GitHub
-Release package or copy the matching Release artifacts into the directories
-listed above.
-
-## Build Locally
-
-Windows with MSYS2 UCRT64 GCC:
-
-```powershell
-$env:CGO_ENABLED = "1"
-$env:CC = "C:\msys64\ucrt64\bin\gcc.exe"
-$env:PATH = "C:\msys64\ucrt64\bin;$env:PATH"
-
-go build -trimpath -buildmode=c-shared `
-  -tags "with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_purego,with_clash_api,badlinkname,tfogo_checklinkname0" `
-  -ldflags "-s -w -buildid= -checklinkname=0" `
-  -o build\singboxffi.dll .
-```
-
-## Run The Dart Smoke Proxy
-
-The Dart example proves the FFI can start a real local `mixed` proxy on
-`127.0.0.1:2080`.
-
-```powershell
-flutter pub get
-cd examples\flutter
-flutter pub get
-dart run bin\proxy.dart ..\..\build\singboxffi.dll
-```
-
-In another terminal:
-
-```powershell
-curl.exe -x socks5h://127.0.0.1:2080 https://example.com
-```
-
-Press `Ctrl+C` in the Dart process to stop the proxy.
-
-## Dart Exports
-
-`lib/singbox_ffi.dart` exports every native symbol in two layers.
-
-Raw C ABI bindings:
+## Quick Start
 
 ```dart
-SbHandle
-SbInitOptions
+import 'package:singbox_ffi/singbox_ffi.dart';
 
-SbVersionNative / SbVersionDart
-SbGoVersionNative / SbGoVersionDart
-SbFreeStringNative / SbFreeStringDart
-SbInitNative / SbInitDart
-SbCheckConfigNative / SbCheckConfigDart
-SbStartNative / SbStartDart
-SbReloadNative / SbReloadDart
-SbStopNative / SbStopDart
-SbFreeHandleNative / SbFreeHandleDart
+const configJson = '''
+{
+  "log": {"level": "info"},
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "127.0.0.1",
+      "listen_port": 2080
+    }
+  ],
+  "outbounds": [
+    {"type": "direct", "tag": "direct"}
+  ],
+  "route": {"final": "direct"}
+}
+''';
 
-SingboxNativeSymbols
-SingboxRawBindings
-SingboxRawBindings.openBundled([path])
-SingboxRawBindings.openDefault([path])
+void main() {
+  final singbox = SingboxFfi.openBundled();
+
+  print('sing-box: ${singbox.version()}');
+  print('Go: ${singbox.goVersion()}');
+
+  singbox.init();
+  singbox.checkConfig(configJson);
+
+  final service = singbox.start(configJson);
+  try {
+    // The mixed proxy is now listening on 127.0.0.1:2080.
+  } finally {
+    service.close();
+  }
+}
 ```
+
+For Flutter apps, `SingboxFfi.openBundled()` is the recommended loader. It
+matches the package's platform packaging:
+
+1. Use the explicit path when you pass one.
+2. On iOS, use `DynamicLibrary.process()` because the native archive/framework
+   is linked into the app.
+3. On Android, Windows, Linux, and the default macOS flow, open the platform
+   dynamic library from normal package/executable search paths.
+
+For command-line smoke tests or custom packaging, pass a path explicitly:
+
+```dart
+final singbox = SingboxFfi.openBundled(r'C:\path\to\singboxffi.dll');
+```
+
+## API Overview
 
 High-level Dart API:
 
 ```dart
-SingboxFfi.open([path])
-SingboxFfi.openBundled([path])
-SingboxFfi.openDefault([path])
-SingboxFfi.fromLibrary(library)
-SingboxFfi.process()
-SingboxFfi.defaultLibraryName
-SingboxFfi.openBundledLibrary([path])
-SingboxFfi.openDefaultLibrary([path])
-SingboxFfi.raw
-SingboxFfi.version()
-SingboxFfi.goVersion()
-SingboxFfi.init([options])
-SingboxFfi.checkConfig(configJson)
-SingboxFfi.start(configJson)
-SingboxFfi.reload(handle, configJson)
-SingboxFfi.stop(handle)
-SingboxFfi.freeHandle(handle)
-SingboxFfi.freeString(pointer)
-SingboxFfi.takeString(pointer)
-SingboxFfi.takeError(errOut)
-
-SingboxInitOptions
-SingboxService.handle
-SingboxService.reload(configJson)
-SingboxService.close()
-SingboxException
-```
-
-## Static Linking
-
-Use the bundled plugin default in Flutter apps:
-
-```dart
 final core = SingboxFfi.openBundled();
+
+core.version();
+core.goVersion();
+core.init(SingboxInitOptions(...));
+core.checkConfig(configJson);
+
+final service = core.start(configJson);
+service.reload(nextConfigJson);
+service.close();
 ```
 
-`SingboxFfi.openBundled([path])` follows the packaging strategy used by the
-plugin:
+Lower-level APIs are also exported for advanced integrations:
 
-1. Use the explicit `path`, when provided.
-2. On iOS, use `DynamicLibrary.process()` because the plugin links the static
-   archive or framework into the app.
-3. On Android, Windows, Linux, and default macOS builds, use dynamic loading via
-   `SingboxFfi.openDefault()`.
+- `SingboxRawBindings` exposes typed Dart FFI function pointers.
+- `SingboxNativeSymbols` contains the exported native symbol names.
+- `SbInitOptions` and native typedefs mirror the C ABI.
+- `SingboxFfi.fromLibrary()` lets you provide an already-opened
+  `DynamicLibrary`.
+- `SingboxFfi.process()` works only when the native symbols are already linked
+  into the current process.
 
-Dynamic linking is the recommended desktop path:
+## Initialization Options
 
-```dart
-final core = SingboxFfi.openDefault('singboxffi.dll');
-```
+`SingboxInitOptions` maps directly to libbox setup options:
 
-`SingboxFfi.openDefault([path])` searches in this order:
+| Dart option | Meaning |
+| --- | --- |
+| `basePath` | Base directory used by libbox. |
+| `workingPath` | Working directory for runtime state. |
+| `tempPath` | Temporary directory for runtime files. |
+| `locale` | Optional locale passed to libbox before setup. |
+| `commandSecret` | Secret for libbox command server support. |
+| `commandPort` | Command server listen port. Use `0` for automatic/default behavior. |
+| `logMaxLines` | Maximum log lines retained by libbox internals. |
+| `debug` | Enable libbox debug setup. |
+| `oomKillerEnabled` | Enable libbox OOM killer behavior. |
+| `oomKillerDisabled` | Disable libbox OOM killer behavior. Defaults to `true`. |
+| `oomMemoryLimit` | Optional OOM memory limit. |
 
-1. The explicit `path`, when provided.
-2. The current working directory.
-3. The executable directory from `Platform.executable`.
-4. The resolved executable directory from `Platform.resolvedExecutable`.
-5. The platform loader default via `DynamicLibrary.open(defaultLibraryName)`.
+## Native ABI
 
-Static linking is possible, but `SingboxFfi.process()` is not a normal fallback
-mode for the Dart API alone. It only works after the native library has
-already been linked into the Flutter runner, app executable, or platform plugin
-so that symbols such as `sb_version` are visible in the process. Then use:
-
-```dart
-final core = SingboxFfi.process();
-```
-
-Short term: do not expose `process()` to app users as an ordinary optional
-mode unless `singbox-ffi` also provides the platform project that links the
-native symbols into the app.
-
-Build a static C archive instead of a dynamic library:
-
-```powershell
-go build -trimpath -buildmode=c-archive `
-  -tags "with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_purego,with_clash_api,badlinkname,tfogo_checklinkname0" `
-  -ldflags "-s -w -buildid= -checklinkname=0" `
-  -o build\singboxffi.a .
-```
-
-Platform notes:
-
-- Windows desktop: prefer `singboxffi.dll`; static linking a Go archive into
-  Flutter's MSVC runner is possible only with extra native runner work and
-  toolchain care.
-- Linux desktop: package `libsingboxffi.so` through CMake.
-- macOS desktop: package `libsingboxffi.dylib` by default. Static
-  archive/framework builds are supported, but app code should call
-  `SingboxFfi.process()` only for those builds.
-- Android: package ABI-specific `.so` files through the Flutter FFI plugin.
-- iOS: link a static archive or framework through CocoaPods; `openBundled()`
-  uses `DynamicLibrary.process()` so Dart can resolve `sb_version`.
-
-Mobile and static mode are handled by the Flutter FFI plugin scaffolding in
-this package. It owns Windows/macOS/Linux native library linking or packaging,
-Android ABI `.so` packaging, iOS/macOS static archive or framework linking, and
-the platform setup required for `DynamicLibrary.process()` to find
-`sb_version`.
-
-## ABI
+The native library exports a small C ABI:
 
 ```c
 typedef uint64_t sb_handle;
@@ -242,83 +184,72 @@ int32_t sb_free_handle(sb_handle handle);
 ```
 
 Strings returned by the core must be released with `sb_free_string`. Handles
-returned by `sb_start` must be stopped and released with `sb_stop` and
-`sb_free_handle`.
+returned by `sb_start` should be stopped with `sb_stop` and released with
+`sb_free_handle`. The Dart `SingboxService.close()` helper does both.
 
-## Repository Split
+## Build Native Artifacts Locally
 
-- `loafman1120/singbox-ffi`: builds and releases native core artifacts.
-- `loafman1120/LitheNet`: Flutter GUI app; downloads `singbox-ffi` artifacts.
+Windows with MSYS2 UCRT64 GCC:
 
-## Dart Package Layout
+```powershell
+$env:CGO_ENABLED = "1"
+$env:CC = "C:\msys64\ucrt64\bin\gcc.exe"
+$env:PATH = "C:\msys64\ucrt64\bin;$env:PATH"
 
-The repository root is the `singbox_ffi` Flutter FFI plugin. LitheNet should
-depend on it directly:
-
-```yaml
-dependencies:
-  singbox_ffi:
-    path: ../singbox-ffi
+go build -trimpath -buildmode=c-shared `
+  -tags "with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_purego,with_clash_api,badlinkname,tfogo_checklinkname0" `
+  -ldflags "-s -w -buildid= -checklinkname=0" `
+  -o build\singboxffi.dll .
 ```
 
-`examples/flutter` is only a smoke/example package. It depends on the root
-plugin with `path: ../..` and should not be consumed as the public API.
+Static archive builds use the same ABI:
 
-## Release Automation
+```powershell
+go build -trimpath -buildmode=c-archive `
+  -tags "with_gvisor,with_quic,with_wireguard,with_utls,with_naive_outbound,with_purego,with_clash_api,badlinkname,tfogo_checklinkname0" `
+  -ldflags "-s -w -buildid= -checklinkname=0" `
+  -o build\singboxffi.a .
+```
 
-GitHub Actions builds native artifacts, validates the lightweight pub.dev
-package, and assembles a complete GitHub Release package.
+Static/process loading is for apps that link the native symbols into the app
+binary or Flutter runner. It is not a general fallback for a missing dynamic
+library.
 
-On every push, pull request, manual dispatch, and GitHub Release publication,
-`.github/workflows/build.yml` builds:
+## Run The Smoke Proxy
 
-- Windows x64 `singboxffi.dll`
-- Linux x86_64/aarch64 `libsingboxffi.so`
-- macOS x86_64/arm64 `libsingboxffi.dylib`
-- Android `arm64-v8a`, `armeabi-v7a`, `x86_64`, and `x86`
-  `libsingboxffi.so` shared libraries
-- iOS device/simulator static archives, assembled into
-  `ios/Frameworks/singboxffi.xcframework`
+The repository includes a Dart smoke example that starts a real local `mixed`
+proxy on `127.0.0.1:2080`.
 
-The packaging job copies those artifacts into the Flutter plugin directories,
-runs `flutter pub publish --dry-run` against the lightweight pub.dev package,
-then uploads `singbox_ffi-<version>.zip` and `singbox_ffi-<version>.tar.gz` as
-workflow artifacts. Those archives keep the native artifacts and are intended
-for GitHub Release consumption.
+```powershell
+flutter pub get
+cd examples\flutter
+flutter pub get
+dart run bin\proxy.dart ..\..\build\singboxffi.dll
+```
 
-The top-level `examples/` smoke tests are excluded from the pub package because
-Pub only recognizes the singular `example/` convention.
+In another terminal:
 
-When the workflow runs from a `v<version>` tag or a published GitHub Release,
-the package archives are also attached to the GitHub Release. The tag version
-must match `pubspec.yaml`.
+```powershell
+curl.exe -x socks5h://127.0.0.1:2080 https://example.com
+```
 
-When the workflow runs from a `v<version>` tag, it also attempts
-`flutter pub publish --force` for the lightweight package. Pub.dev automated
-publishing must be enabled for `loafman1120/singbox-ffi` with a matching tag
-pattern such as `v{{version}}`, and the first package version must still be
-published manually on pub.dev.
+Press `Ctrl+C` in the Dart process to stop the proxy.
 
-## Status
+## Repository Notes
 
-Implemented:
-
-- config validation
-- local mixed/SOCKS/HTTP proxy start, reload, stop
-- desktop stub platform interface
-- C and Dart smoke examples
-
-Not implemented in this core yet:
-
-- TUN mode
-- system proxy toggling
-- event/log draining
+- The repository root is the publishable Flutter FFI plugin.
+- `example/` is the pub.dev-facing example.
+- `examples/flutter` and `examples/c` are repository smoke tests.
+- Release automation builds native artifacts and attaches complete packages to
+  GitHub Releases.
+- The lightweight pub.dev package excludes generated native binaries.
 
 ## License Notice
 
 This project links against `github.com/sagernet/sing-box/experimental/libbox`.
-sing-box is distributed under the GNU General Public License, version 3 or later,
-with the additional upstream naming restriction copied in `LICENSE.sing-box`.
+sing-box is distributed under the GNU General Public License, version 3 or
+later, with the additional upstream naming restriction copied in
+`LICENSE.sing-box`.
 
 Distributions of this wrapper, linked binaries, and applications embedding the
 produced native library should carry the corresponding GPL notice and must not
