@@ -31,6 +31,13 @@ void main(List<String> args) {
   final service = singbox.start(configJson);
   try {
     print('mixed proxy listening on 127.0.0.1:2080');
+    for (final event in service.drainLogs()) {
+      if (event.isReset) {
+        print('logs reset');
+      } else {
+        print('[${event.levelName}] ${event.message}');
+      }
+    }
     service.reload(configJson);
   } finally {
     service.close();

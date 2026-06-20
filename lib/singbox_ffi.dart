@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 
@@ -95,6 +97,22 @@ typedef SbStopDart = int Function(int, Pointer<Pointer<Utf8>>);
 typedef SbFreeHandleNative = Int32 Function(Uint64);
 typedef SbFreeHandleDart = int Function(int);
 
+typedef SbDrainLogsNative = Int32 Function(
+  Uint64,
+  Int32,
+  Pointer<Pointer<Utf8>>,
+  Pointer<Pointer<Utf8>>,
+);
+typedef SbDrainLogsDart = int Function(
+  int,
+  int,
+  Pointer<Pointer<Utf8>>,
+  Pointer<Pointer<Utf8>>,
+);
+
+typedef SbClearLogsNative = Int32 Function(Uint64, Pointer<Pointer<Utf8>>);
+typedef SbClearLogsDart = int Function(int, Pointer<Pointer<Utf8>>);
+
 /// Exported native symbol names used by [SingboxRawBindings].
 final class SingboxNativeSymbols {
   const SingboxNativeSymbols._();
@@ -108,6 +126,8 @@ final class SingboxNativeSymbols {
   static const reload = 'sb_reload';
   static const stop = 'sb_stop';
   static const freeHandle = 'sb_free_handle';
+  static const drainLogs = 'sb_drain_logs';
+  static const clearLogs = 'sb_clear_logs';
 }
 
 /// Typed Dart FFI bindings for the native `singboxffi` C ABI.
@@ -147,6 +167,14 @@ class SingboxRawBindings {
         sbFreeHandle =
             library.lookupFunction<SbFreeHandleNative, SbFreeHandleDart>(
           SingboxNativeSymbols.freeHandle,
+        ),
+        sbDrainLogs =
+            library.lookupFunction<SbDrainLogsNative, SbDrainLogsDart>(
+          SingboxNativeSymbols.drainLogs,
+        ),
+        sbClearLogs =
+            library.lookupFunction<SbClearLogsNative, SbClearLogsDart>(
+          SingboxNativeSymbols.clearLogs,
         );
 
   /// Opens [path], or the platform default library name when [path] is omitted.
@@ -184,6 +212,8 @@ class SingboxRawBindings {
   final SbReloadDart sbReload;
   final SbStopDart sbStop;
   final SbFreeHandleDart sbFreeHandle;
+  final SbDrainLogsDart sbDrainLogs;
+  final SbClearLogsDart sbClearLogs;
 }
 
 /// Error thrown by the high-level Dart wrapper.
@@ -248,6 +278,57 @@ class SingboxInitOptions {
 
   /// Optional OOM memory limit passed through to libbox.
   final int oomMemoryLimit;
+}
+
+/// One log event emitted by a running sing-box service.
+///
+/// A reset event means libbox cleared its internal log history, usually because
+/// a service started or reloaded. UI log panels can use [isReset] to clear the
+/// visible list before appending later entries.
+class SingboxLogEvent {
+  const SingboxLogEvent({
+    required this.sequence,
+    required this.level,
+    required this.levelName,
+    required this.message,
+    required this.isReset,
+  });
+
+  factory SingboxLogEvent.fromJson(Map<String, Object?> json) {
+    return SingboxLogEvent(
+      sequence: (json['sequence'] as num?)?.toInt() ?? 0,
+      level: (json['level'] as num?)?.toInt() ?? 0,
+      levelName: json['levelName'] as String? ?? '',
+      message: json['message'] as String? ?? '',
+      isReset: json['reset'] == true,
+    );
+  }
+
+  /// Monotonic native-side sequence number for this handle.
+  final int sequence;
+
+  /// Numeric sing-box log level.
+  final int level;
+
+  /// Human-readable level name such as `info`, `warn`, or `error`.
+  final String levelName;
+
+  /// Formatted log message from sing-box/libbox.
+  final String message;
+
+  /// Whether this event means the native log history was reset.
+  final bool isReset;
+
+  /// Whether this event contains a normal log message.
+  bool get isMessage => !isReset;
+
+  @override
+  String toString() {
+    if (isReset) {
+      return 'SingboxLogEvent.reset(sequence: $sequence)';
+    }
+    return 'SingboxLogEvent($levelName, $message)';
+  }
 }
 
 /// High-level Dart wrapper around the native `singboxffi` library.
@@ -503,6 +584,77 @@ class SingboxFfi {
     }
   }
 
+  /// Drains queued log events for [handle].
+  ///
+  /// Set [maxEntries] to a positive value to limit the number of events drained
+  /// in one call. The default `0` drains everything currently queued.
+  List<SingboxLogEvent> drainLogs(SbHandle handle, {int maxEntries = 0}) {
+    final jsonOut = calloc<Pointer<Utf8>>();
+    final errOut = calloc<Pointer<Utf8>>();
+    try {
+      final code = raw.sbDrainLogs(handle, maxEntries, jsonOut, errOut);
+      if (code != 0) {
+        throw SingboxException(takeError(errOut));
+      }
+      final payload = takeString(jsonOut.value);
+      final decoded = jsonDecode(payload) as List<Object?>;
+      return decoded
+          .map((item) => SingboxLogEvent.fromJson(
+                Map<String, Object?>.from(item as Map),
+              ))
+          .toList(growable: false);
+    } finally {
+      calloc.free(jsonOut);
+      calloc.free(errOut);
+    }
+  }
+
+  /// Clears queued Dart-facing logs and libbox's internal log history.
+  void clearLogs(SbHandle handle) {
+    final errOut = calloc<Pointer<Utf8>>();
+    try {
+      final code = raw.sbClearLogs(handle, errOut);
+      if (code != 0) {
+        throw SingboxException(takeError(errOut));
+      }
+    } finally {
+      calloc.free(errOut);
+    }
+  }
+
+  /// Polls native logs for [handle] and exposes them as a Dart stream.
+  ///
+  /// The stream drains pending native events every [interval]. It is broadcast
+  /// so multiple UI widgets can listen to the same stream returned by app code.
+  Stream<SingboxLogEvent> logs(
+    SbHandle handle, {
+    Duration interval = const Duration(milliseconds: 250),
+    int batchSize = 0,
+  }) {
+    late StreamController<SingboxLogEvent> controller;
+    Timer? timer;
+
+    void drain() {
+      for (final event in drainLogs(handle, maxEntries: batchSize)) {
+        controller.add(event);
+      }
+    }
+
+    controller = StreamController<SingboxLogEvent>.broadcast(
+      onListen: () {
+        drain();
+        timer ??= Timer.periodic(interval, (_) => drain());
+      },
+      onCancel: () {
+        if (!controller.hasListener) {
+          timer?.cancel();
+          timer = null;
+        }
+      },
+    );
+    return controller.stream;
+  }
+
   /// Frees a native string returned by the core.
   void freeString(Pointer<Utf8> pointer) {
     if (pointer != nullptr) {
@@ -550,6 +702,33 @@ class SingboxService {
       throw SingboxException('service is closed');
     }
     _ffi.reload(handle, configJson);
+  }
+
+  /// Drains queued log events for this service.
+  List<SingboxLogEvent> drainLogs({int maxEntries = 0}) {
+    if (_closed) {
+      throw SingboxException('service is closed');
+    }
+    return _ffi.drainLogs(handle, maxEntries: maxEntries);
+  }
+
+  /// Clears queued logs and libbox's internal log history for this service.
+  void clearLogs() {
+    if (_closed) {
+      throw SingboxException('service is closed');
+    }
+    _ffi.clearLogs(handle);
+  }
+
+  /// Streams log events from this service.
+  Stream<SingboxLogEvent> logs({
+    Duration interval = const Duration(milliseconds: 250),
+    int batchSize = 0,
+  }) {
+    if (_closed) {
+      throw SingboxException('service is closed');
+    }
+    return _ffi.logs(handle, interval: interval, batchSize: batchSize);
   }
 
   /// Stops the native service and releases its handle.

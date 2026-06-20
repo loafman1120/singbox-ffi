@@ -1,3 +1,11 @@
+## 0.1.2
+
+- Add Dart-facing log draining and streaming APIs.
+- Add native `sb_drain_logs` and `sb_clear_logs` ABI functions backed by
+  libbox's started-service log subscription.
+- Add `SingboxLogEvent`, `SingboxService.logs()`, `drainLogs()`, and
+  `clearLogs()` for UI log panels.
+
 ## 0.1.1
 
 - Improve the pub.dev README with clearer install, artifact, API, and feature

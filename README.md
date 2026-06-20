@@ -21,6 +21,7 @@ project's GitHub Releases.
 - Start a sing-box service from JSON config and receive an opaque handle.
 - Reload a running service with new JSON config.
 - Stop and free a running service handle.
+- Drain or stream service logs for UI log panels.
 - Expose the same ABI to C, Dart raw FFI bindings, and a small Dart wrapper.
 
 The wrapper currently supports proxy-style sing-box configs such as local
@@ -32,7 +33,7 @@ These platform integrations are not implemented by this wrapper yet:
 
 - TUN mode (`OpenTun` returns an unsupported error).
 - System proxy toggling.
-- Event or log draining APIs.
+- General event draining APIs beyond logs.
 - SSH agent, platform shell, SFTP, user lookup, and connection-owner lookup.
 
 If your app needs those features, treat this package as a lower-level starting
@@ -44,7 +45,7 @@ Add the package:
 
 ```yaml
 dependencies:
-  singbox_ffi: ^0.1.0
+  singbox_ffi: ^0.1.2
 ```
 
 Then add the native artifact for each platform you build. The pub.dev package
@@ -85,7 +86,7 @@ const configJson = '''
 }
 ''';
 
-void main() {
+Future<void> main() async {
   final singbox = SingboxFfi.openBundled();
 
   print('sing-box: ${singbox.version()}');
@@ -97,6 +98,13 @@ void main() {
   final service = singbox.start(configJson);
   try {
     // The mixed proxy is now listening on 127.0.0.1:2080.
+    await for (final event in service.logs()) {
+      if (event.isReset) {
+        // Clear your visible log list.
+      } else {
+        print('[${event.levelName}] ${event.message}');
+      }
+    }
   } finally {
     service.close();
   }
@@ -131,6 +139,9 @@ core.init(SingboxInitOptions(...));
 core.checkConfig(configJson);
 
 final service = core.start(configJson);
+service.logs();
+service.drainLogs();
+service.clearLogs();
 service.reload(nextConfigJson);
 service.close();
 ```
@@ -181,11 +192,20 @@ int32_t sb_start(char *config_json, sb_handle *out, char **err_out);
 int32_t sb_reload(sb_handle handle, char *config_json, char **err_out);
 int32_t sb_stop(sb_handle handle, char **err_out);
 int32_t sb_free_handle(sb_handle handle);
+
+int32_t sb_drain_logs(sb_handle handle, int32_t max_entries,
+                      char **json_out, char **err_out);
+int32_t sb_clear_logs(sb_handle handle, char **err_out);
 ```
 
 Strings returned by the core must be released with `sb_free_string`. Handles
 returned by `sb_start` should be stopped with `sb_stop` and released with
 `sb_free_handle`. The Dart `SingboxService.close()` helper does both.
+
+`sb_drain_logs` returns a JSON array of log events. A reset event means libbox
+cleared its internal log history, usually because a service started or reloaded.
+Dart callers normally use `SingboxService.logs()` instead of parsing this JSON
+directly.
 
 ## Build Native Artifacts Locally
 

@@ -2,7 +2,7 @@ Pod::Spec.new do |s|
   force_load_archive = File.exist?(File.join(__dir__, 'Libraries', 'libsingboxffi.a'))
 
   s.name             = 'singbox_ffi'
-  s.version          = '0.1.1'
+  s.version          = '0.1.2'
   s.summary          = 'Flutter FFI packaging for the singbox-ffi native core.'
   s.description      = 'Packages and links the singbox-ffi native core for Flutter apps.'
   s.homepage         = 'https://github.com/loafman1120/singbox-ffi'

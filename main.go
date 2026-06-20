@@ -24,13 +24,19 @@ typedef struct {
 import "C"
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"sync"
 	"sync/atomic"
 	"unsafe"
 
+	"github.com/sagernet/sing-box/daemon"
 	libbox "github.com/sagernet/sing-box/experimental/libbox"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func main() {}
@@ -121,9 +127,11 @@ func sb_start(configJSON *C.char, out *C.sb_handle, errOut **C.char) C.int32_t {
 		setErr(errOut, err.Error())
 		return -1
 	}
+	runtime := newRuntimeHandle(server)
+	runtime.startLogSubscription()
 	handle := nextHandle.Add(1)
 	handlesMu.Lock()
-	handles[handle] = &runtimeHandle{server: server}
+	handles[handle] = runtime
 	handlesMu.Unlock()
 	*out = C.sb_handle(handle)
 	return 0
@@ -174,8 +182,67 @@ func sb_free_handle(handle C.sb_handle) C.int32_t {
 	if !ok {
 		return -1
 	}
-	runtime.server.Close()
+	runtime.close()
 	return 0
+}
+
+//export sb_drain_logs
+func sb_drain_logs(handle C.sb_handle, maxEntries C.int32_t, jsonOut **C.char, errOut **C.char) C.int32_t {
+	clearErr(errOut)
+	if jsonOut == nil {
+		setErr(errOut, "sb_drain_logs: nil output")
+		return -1
+	}
+	*jsonOut = nil
+	runtime, ok := getHandle(uint64(handle))
+	if !ok {
+		setErr(errOut, "sb_drain_logs: invalid handle")
+		return -1
+	}
+	entries := runtime.logs.drain(int(maxEntries))
+	if entries == nil {
+		entries = []logEvent{}
+	}
+	payload, err := json.Marshal(entries)
+	if err != nil {
+		setErr(errOut, err.Error())
+		return -1
+	}
+	*jsonOut = C.CString(string(payload))
+	return 0
+}
+
+//export sb_clear_logs
+func sb_clear_logs(handle C.sb_handle, errOut **C.char) C.int32_t {
+	clearErr(errOut)
+	runtime, ok := getHandle(uint64(handle))
+	if !ok {
+		setErr(errOut, "sb_clear_logs: invalid handle")
+		return -1
+	}
+	runtime.logs.clear()
+	if _, err := runtime.server.StartedService.ClearLogs(context.Background(), &emptypb.Empty{}); err != nil {
+		setErr(errOut, err.Error())
+		return -1
+	}
+	return 0
+}
+
+func newRuntimeHandle(server *libbox.CommandServer) *runtimeHandle {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &runtimeHandle{
+		server:    server,
+		logs:      newLogBuffer(),
+		logCtx:    ctx,
+		logCancel: cancel,
+	}
+}
+
+func (h *runtimeHandle) close() {
+	if h.logCancel != nil {
+		h.logCancel()
+	}
+	h.server.Close()
 }
 
 type initOptions struct {
@@ -228,8 +295,125 @@ func setErr(errOut **C.char, message string) {
 }
 
 type runtimeHandle struct {
-	server *libbox.CommandServer
+	server    *libbox.CommandServer
+	logs      *logBuffer
+	logCtx    context.Context
+	logCancel context.CancelFunc
 }
+
+func (h *runtimeHandle) startLogSubscription() {
+	go func() {
+		_ = h.server.StartedService.SubscribeLog(&emptypb.Empty{}, &logStreamServer{
+			ctx:    h.logCtx,
+			buffer: h.logs,
+		})
+	}()
+}
+
+type logEvent struct {
+	Sequence  uint64 `json:"sequence"`
+	Level     int32  `json:"level,omitempty"`
+	LevelName string `json:"levelName,omitempty"`
+	Message   string `json:"message,omitempty"`
+	Reset     bool   `json:"reset,omitempty"`
+}
+
+type logBuffer struct {
+	mu      sync.Mutex
+	nextSeq uint64
+	entries []logEvent
+}
+
+func newLogBuffer() *logBuffer {
+	return &logBuffer{}
+}
+
+func (b *logBuffer) appendReset() {
+	b.mu.Lock()
+	b.nextSeq++
+	b.entries = append(b.entries, logEvent{
+		Sequence: b.nextSeq,
+		Reset:    true,
+	})
+	b.mu.Unlock()
+}
+
+func (b *logBuffer) appendMessage(level int32, message string) {
+	b.mu.Lock()
+	b.nextSeq++
+	b.entries = append(b.entries, logEvent{
+		Sequence:  b.nextSeq,
+		Level:     level,
+		LevelName: logLevelName(level),
+		Message:   message,
+	})
+	b.mu.Unlock()
+}
+
+func (b *logBuffer) drain(maxEntries int) []logEvent {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if maxEntries <= 0 || maxEntries >= len(b.entries) {
+		entries := b.entries
+		b.entries = nil
+		return entries
+	}
+	entries := append([]logEvent(nil), b.entries[:maxEntries]...)
+	b.entries = append([]logEvent(nil), b.entries[maxEntries:]...)
+	return entries
+}
+
+func (b *logBuffer) clear() {
+	b.mu.Lock()
+	b.entries = nil
+	b.mu.Unlock()
+}
+
+func logLevelName(level int32) string {
+	switch level {
+	case -1:
+		return "disabled"
+	case 0:
+		return "panic"
+	case 1:
+		return "fatal"
+	case 2:
+		return "error"
+	case 3:
+		return "warn"
+	case 4:
+		return "info"
+	case 5:
+		return "debug"
+	case 6:
+		return "trace"
+	default:
+		return "unknown"
+	}
+}
+
+type logStreamServer struct {
+	grpc.ServerStream
+	ctx    context.Context
+	buffer *logBuffer
+}
+
+func (s *logStreamServer) Send(message *daemon.Log) error {
+	if message.Reset_ {
+		s.buffer.appendReset()
+	}
+	for _, entry := range message.Messages {
+		s.buffer.appendMessage(int32(entry.Level), entry.Message)
+	}
+	return nil
+}
+
+func (s *logStreamServer) SetHeader(metadata.MD) error  { return nil }
+func (s *logStreamServer) SendHeader(metadata.MD) error { return nil }
+func (s *logStreamServer) SetTrailer(metadata.MD)       {}
+func (s *logStreamServer) Context() context.Context     { return s.ctx }
+func (s *logStreamServer) SendMsg(any) error            { return nil }
+func (s *logStreamServer) RecvMsg(any) error            { return nil }
 
 var (
 	nextHandle atomic.Uint64
