@@ -45,7 +45,7 @@ Add the package:
 
 ```yaml
 dependencies:
-  singbox_ffi: ^0.1.2
+  singbox_ffi: ^0.1.3
 ```
 
 Then add the native artifact for each platform you build. The pub.dev package
@@ -139,6 +139,7 @@ core.init(SingboxInitOptions(...));
 core.checkConfig(configJson);
 
 final service = core.start(configJson);
+service.state();
 service.logs();
 service.drainLogs();
 service.clearLogs();
@@ -196,6 +197,7 @@ int32_t sb_free_handle(sb_handle handle);
 int32_t sb_drain_logs(sb_handle handle, int32_t max_entries,
                       char **json_out, char **err_out);
 int32_t sb_clear_logs(sb_handle handle, char **err_out);
+int32_t sb_service_state(sb_handle handle, char **json_out, char **err_out);
 ```
 
 Strings returned by the core must be released with `sb_free_string`. Handles
@@ -206,6 +208,9 @@ returned by `sb_start` should be stopped with `sb_stop` and released with
 cleared its internal log history, usually because a service started or reloaded.
 Dart callers normally use `SingboxService.logs()` instead of parsing this JSON
 directly.
+
+`sb_service_state` returns a JSON state snapshot for a running handle. Dart
+callers normally use `SingboxService.state()`.
 
 ## Build Native Artifacts Locally
 

@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'singbox_ffi'
-  s.version          = '0.1.2'
+  s.version          = '0.1.3'
   s.summary          = 'Flutter FFI packaging for the singbox-ffi native core.'
   s.description      = 'Packages and links the singbox-ffi native core for Flutter macOS apps.'
   s.homepage         = 'https://github.com/loafman1120/singbox-ffi'

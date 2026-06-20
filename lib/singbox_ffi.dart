@@ -113,6 +113,17 @@ typedef SbDrainLogsDart = int Function(
 typedef SbClearLogsNative = Int32 Function(Uint64, Pointer<Pointer<Utf8>>);
 typedef SbClearLogsDart = int Function(int, Pointer<Pointer<Utf8>>);
 
+typedef SbServiceStateNative = Int32 Function(
+  Uint64,
+  Pointer<Pointer<Utf8>>,
+  Pointer<Pointer<Utf8>>,
+);
+typedef SbServiceStateDart = int Function(
+  int,
+  Pointer<Pointer<Utf8>>,
+  Pointer<Pointer<Utf8>>,
+);
+
 /// Exported native symbol names used by [SingboxRawBindings].
 final class SingboxNativeSymbols {
   const SingboxNativeSymbols._();
@@ -128,6 +139,7 @@ final class SingboxNativeSymbols {
   static const freeHandle = 'sb_free_handle';
   static const drainLogs = 'sb_drain_logs';
   static const clearLogs = 'sb_clear_logs';
+  static const serviceState = 'sb_service_state';
 }
 
 /// Typed Dart FFI bindings for the native `singboxffi` C ABI.
@@ -175,6 +187,10 @@ class SingboxRawBindings {
         sbClearLogs =
             library.lookupFunction<SbClearLogsNative, SbClearLogsDart>(
           SingboxNativeSymbols.clearLogs,
+        ),
+        sbServiceState =
+            library.lookupFunction<SbServiceStateNative, SbServiceStateDart>(
+          SingboxNativeSymbols.serviceState,
         );
 
   /// Opens [path], or the platform default library name when [path] is omitted.
@@ -214,16 +230,37 @@ class SingboxRawBindings {
   final SbFreeHandleDart sbFreeHandle;
   final SbDrainLogsDart sbDrainLogs;
   final SbClearLogsDart sbClearLogs;
+  final SbServiceStateDart sbServiceState;
+}
+
+/// Broad category for errors reported by the high-level wrapper.
+enum SingboxErrorKind {
+  config,
+  permission,
+  missingDependency,
+  systemProxyUnavailable,
+  serviceState,
+  native,
+  unknown,
 }
 
 /// Error thrown by the high-level Dart wrapper.
 class SingboxException implements Exception {
-  SingboxException(this.message);
+  SingboxException(
+    this.message, {
+    this.kind = SingboxErrorKind.unknown,
+    this.code,
+  });
 
   final String message;
+  final SingboxErrorKind kind;
+  final String? code;
 
   @override
-  String toString() => 'SingboxException: $message';
+  String toString() {
+    final codeSuffix = code == null ? '' : ', code: $code';
+    return 'SingboxException(${kind.name}$codeSuffix): $message';
+  }
 }
 
 /// Initialization options for [SingboxFfi.init].
@@ -331,6 +368,53 @@ class SingboxLogEvent {
   }
 }
 
+/// Native service runtime state.
+enum SingboxServiceState {
+  running,
+  stopped,
+  closed,
+  unknown;
+
+  static SingboxServiceState fromJson(String? value) {
+    return switch (value) {
+      'running' => SingboxServiceState.running,
+      'stopped' => SingboxServiceState.stopped,
+      'closed' => SingboxServiceState.closed,
+      _ => SingboxServiceState.unknown,
+    };
+  }
+}
+
+/// Snapshot of one native service handle.
+class SingboxServiceSnapshot {
+  const SingboxServiceSnapshot({
+    required this.state,
+    required this.running,
+    required this.closed,
+    this.lastError,
+  });
+
+  factory SingboxServiceSnapshot.fromJson(Map<String, Object?> json) {
+    return SingboxServiceSnapshot(
+      state: SingboxServiceState.fromJson(json['state'] as String?),
+      running: json['running'] == true,
+      closed: json['closed'] == true,
+      lastError: json['lastError'] as String?,
+    );
+  }
+
+  final SingboxServiceState state;
+  final bool running;
+  final bool closed;
+  final String? lastError;
+
+  @override
+  String toString() {
+    return 'SingboxServiceSnapshot(state: ${state.name}, running: $running, '
+        'closed: $closed, lastError: $lastError)';
+  }
+}
+
 /// High-level Dart wrapper around the native `singboxffi` library.
 ///
 /// A typical lifecycle is:
@@ -425,6 +509,8 @@ class SingboxFfi {
       throw SingboxException(
         'failed to open $libraryName from default search paths: '
         '${lastError ?? error}',
+        kind: SingboxErrorKind.missingDependency,
+        code: 'native.library_not_found',
       );
     }
   }
@@ -496,7 +582,7 @@ class SingboxFfi {
 
       final code = raw.sbInit(opts, errOut);
       if (code != 0) {
-        throw SingboxException(takeError(errOut));
+        throw takeNativeException(errOut, fallbackCode: 'native.init_failed');
       }
     } finally {
       for (final pointer in allocations) {
@@ -516,7 +602,11 @@ class SingboxFfi {
     try {
       final code = raw.sbCheckConfig(config, errOut);
       if (code != 0) {
-        throw SingboxException(takeError(errOut));
+        throw takeNativeException(
+          errOut,
+          fallbackKind: SingboxErrorKind.config,
+          fallbackCode: 'config.invalid',
+        );
       }
     } finally {
       calloc.free(config);
@@ -535,7 +625,7 @@ class SingboxFfi {
     try {
       final code = raw.sbStart(config, handleOut, errOut);
       if (code != 0) {
-        throw SingboxException(takeError(errOut));
+        throw takeNativeException(errOut, fallbackCode: 'service.start_failed');
       }
       return SingboxService._(this, handleOut.value);
     } finally {
@@ -552,7 +642,10 @@ class SingboxFfi {
     try {
       final code = raw.sbReload(handle, config, errOut);
       if (code != 0) {
-        throw SingboxException(takeError(errOut));
+        throw takeNativeException(
+          errOut,
+          fallbackCode: 'service.reload_failed',
+        );
       }
     } finally {
       calloc.free(config);
@@ -569,7 +662,7 @@ class SingboxFfi {
     try {
       final code = raw.sbStop(handle, errOut);
       if (code != 0) {
-        throw SingboxException(takeError(errOut));
+        throw takeNativeException(errOut, fallbackCode: 'service.stop_failed');
       }
     } finally {
       calloc.free(errOut);
@@ -580,7 +673,11 @@ class SingboxFfi {
   void freeHandle(SbHandle handle) {
     final code = raw.sbFreeHandle(handle);
     if (code != 0) {
-      throw SingboxException('invalid handle');
+      throw SingboxException(
+        'invalid handle',
+        kind: SingboxErrorKind.serviceState,
+        code: 'service.invalid_handle',
+      );
     }
   }
 
@@ -594,7 +691,10 @@ class SingboxFfi {
     try {
       final code = raw.sbDrainLogs(handle, maxEntries, jsonOut, errOut);
       if (code != 0) {
-        throw SingboxException(takeError(errOut));
+        throw takeNativeException(
+          errOut,
+          fallbackCode: 'service.drain_logs_failed',
+        );
       }
       final payload = takeString(jsonOut.value);
       final decoded = jsonDecode(payload) as List<Object?>;
@@ -615,9 +715,34 @@ class SingboxFfi {
     try {
       final code = raw.sbClearLogs(handle, errOut);
       if (code != 0) {
-        throw SingboxException(takeError(errOut));
+        throw takeNativeException(
+          errOut,
+          fallbackCode: 'service.clear_logs_failed',
+        );
       }
     } finally {
+      calloc.free(errOut);
+    }
+  }
+
+  /// Returns a native state snapshot for [handle].
+  SingboxServiceSnapshot serviceState(SbHandle handle) {
+    final jsonOut = calloc<Pointer<Utf8>>();
+    final errOut = calloc<Pointer<Utf8>>();
+    try {
+      final code = raw.sbServiceState(handle, jsonOut, errOut);
+      if (code != 0) {
+        throw takeNativeException(
+          errOut,
+          fallbackCode: 'service.state_failed',
+        );
+      }
+      final payload = takeString(jsonOut.value);
+      return SingboxServiceSnapshot.fromJson(
+        Map<String, Object?>.from(jsonDecode(payload) as Map),
+      );
+    } finally {
+      calloc.free(jsonOut);
       calloc.free(errOut);
     }
   }
@@ -682,6 +807,66 @@ class SingboxFfi {
     }
     return takeString(pointer);
   }
+
+  /// Converts a native `err_out` pointer to a structured [SingboxException].
+  SingboxException takeNativeException(
+    Pointer<Pointer<Utf8>> errOut, {
+    SingboxErrorKind fallbackKind = SingboxErrorKind.native,
+    String? fallbackCode,
+  }) {
+    final message = takeError(errOut);
+    final classified = _classifyNativeError(
+      message,
+      fallbackKind: fallbackKind,
+      fallbackCode: fallbackCode,
+    );
+    return SingboxException(
+      message,
+      kind: classified.kind,
+      code: classified.code,
+    );
+  }
+
+  static ({SingboxErrorKind kind, String? code}) _classifyNativeError(
+    String message, {
+    required SingboxErrorKind fallbackKind,
+    String? fallbackCode,
+  }) {
+    final lower = message.toLowerCase();
+    if (lower.contains('invalid handle') ||
+        lower.contains('service is closed') ||
+        lower.contains('os: invalid') ||
+        lower.contains('file already closed')) {
+      return (
+        kind: SingboxErrorKind.serviceState,
+        code: 'service.invalid_state',
+      );
+    }
+    if (lower.contains('permission') ||
+        lower.contains('access is denied') ||
+        lower.contains('administrator') ||
+        lower.contains('privilege')) {
+      return (
+        kind: SingboxErrorKind.permission,
+        code: 'platform.permission_denied',
+      );
+    }
+    if (lower.contains('system proxy')) {
+      return (
+        kind: SingboxErrorKind.systemProxyUnavailable,
+        code: 'system_proxy.unavailable',
+      );
+    }
+    if (lower.contains('not found') ||
+        lower.contains('no such file') ||
+        lower.contains('cannot find')) {
+      return (
+        kind: SingboxErrorKind.missingDependency,
+        code: 'native.missing_dependency',
+      );
+    }
+    return (kind: fallbackKind, code: fallbackCode);
+  }
 }
 
 /// Running sing-box service handle owned by [SingboxFfi].
@@ -696,10 +881,29 @@ class SingboxService {
   final SbHandle handle;
   bool _closed = false;
 
+  /// Whether this Dart wrapper has already released its native handle.
+  bool get isClosed => _closed;
+
+  /// Returns the current native state snapshot for this service.
+  SingboxServiceSnapshot state() {
+    if (_closed) {
+      return const SingboxServiceSnapshot(
+        state: SingboxServiceState.closed,
+        running: false,
+        closed: true,
+      );
+    }
+    return _ffi.serviceState(handle);
+  }
+
   /// Reloads this service with a new sing-box JSON configuration.
   void reload(String configJson) {
     if (_closed) {
-      throw SingboxException('service is closed');
+      throw SingboxException(
+        'service is closed',
+        kind: SingboxErrorKind.serviceState,
+        code: 'service.closed',
+      );
     }
     _ffi.reload(handle, configJson);
   }
@@ -707,7 +911,11 @@ class SingboxService {
   /// Drains queued log events for this service.
   List<SingboxLogEvent> drainLogs({int maxEntries = 0}) {
     if (_closed) {
-      throw SingboxException('service is closed');
+      throw SingboxException(
+        'service is closed',
+        kind: SingboxErrorKind.serviceState,
+        code: 'service.closed',
+      );
     }
     return _ffi.drainLogs(handle, maxEntries: maxEntries);
   }
@@ -715,7 +923,11 @@ class SingboxService {
   /// Clears queued logs and libbox's internal log history for this service.
   void clearLogs() {
     if (_closed) {
-      throw SingboxException('service is closed');
+      throw SingboxException(
+        'service is closed',
+        kind: SingboxErrorKind.serviceState,
+        code: 'service.closed',
+      );
     }
     _ffi.clearLogs(handle);
   }
@@ -726,7 +938,11 @@ class SingboxService {
     int batchSize = 0,
   }) {
     if (_closed) {
-      throw SingboxException('service is closed');
+      throw SingboxException(
+        'service is closed',
+        kind: SingboxErrorKind.serviceState,
+        code: 'service.closed',
+      );
     }
     return _ffi.logs(handle, interval: interval, batchSize: batchSize);
   }

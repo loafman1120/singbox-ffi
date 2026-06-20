@@ -1,3 +1,10 @@
+## 0.1.3
+
+- Add structured error metadata with `SingboxErrorKind` and optional error
+  codes on `SingboxException`.
+- Add native service state snapshots through `SingboxService.state()`.
+- Make repeated native stop calls for the same handle idempotent.
+
 ## 0.1.2
 
 - Add Dart-facing log draining and streaming APIs.

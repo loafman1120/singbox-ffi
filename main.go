@@ -150,9 +150,11 @@ func sb_reload(handle C.sb_handle, configJSON *C.char, errOut **C.char) C.int32_
 		return -1
 	}
 	if err := runtime.server.StartOrReloadService(C.GoString(configJSON), &libbox.OverrideOptions{}); err != nil {
+		runtime.setLastError(err.Error())
 		setErr(errOut, err.Error())
 		return -1
 	}
+	runtime.setState(serviceStateRunning)
 	return 0
 }
 
@@ -164,10 +166,15 @@ func sb_stop(handle C.sb_handle, errOut **C.char) C.int32_t {
 		setErr(errOut, "sb_stop: invalid handle")
 		return -1
 	}
+	if runtime.state() == serviceStateStopped {
+		return 0
+	}
 	if err := runtime.server.CloseService(); err != nil {
+		runtime.setLastError(err.Error())
 		setErr(errOut, err.Error())
 		return -1
 	}
+	runtime.setState(serviceStateStopped)
 	return 0
 }
 
@@ -228,6 +235,28 @@ func sb_clear_logs(handle C.sb_handle, errOut **C.char) C.int32_t {
 	return 0
 }
 
+//export sb_service_state
+func sb_service_state(handle C.sb_handle, jsonOut **C.char, errOut **C.char) C.int32_t {
+	clearErr(errOut)
+	if jsonOut == nil {
+		setErr(errOut, "sb_service_state: nil output")
+		return -1
+	}
+	*jsonOut = nil
+	runtime, ok := getHandle(uint64(handle))
+	if !ok {
+		setErr(errOut, "sb_service_state: invalid handle")
+		return -1
+	}
+	payload, err := json.Marshal(runtime.snapshot())
+	if err != nil {
+		setErr(errOut, err.Error())
+		return -1
+	}
+	*jsonOut = C.CString(string(payload))
+	return 0
+}
+
 func newRuntimeHandle(server *libbox.CommandServer) *runtimeHandle {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &runtimeHandle{
@@ -235,6 +264,7 @@ func newRuntimeHandle(server *libbox.CommandServer) *runtimeHandle {
 		logs:      newLogBuffer(),
 		logCtx:    ctx,
 		logCancel: cancel,
+		nowState:  serviceStateRunning,
 	}
 }
 
@@ -242,6 +272,7 @@ func (h *runtimeHandle) close() {
 	if h.logCancel != nil {
 		h.logCancel()
 	}
+	h.setState(serviceStateClosed)
 	h.server.Close()
 }
 
@@ -299,6 +330,53 @@ type runtimeHandle struct {
 	logs      *logBuffer
 	logCtx    context.Context
 	logCancel context.CancelFunc
+	stateMu   sync.RWMutex
+	nowState  serviceState
+	lastError string
+}
+
+type serviceState string
+
+const (
+	serviceStateRunning serviceState = "running"
+	serviceStateStopped serviceState = "stopped"
+	serviceStateClosed  serviceState = "closed"
+)
+
+type serviceSnapshot struct {
+	State     serviceState `json:"state"`
+	Running   bool         `json:"running"`
+	Closed    bool         `json:"closed"`
+	LastError string       `json:"lastError,omitempty"`
+}
+
+func (h *runtimeHandle) state() serviceState {
+	h.stateMu.RLock()
+	defer h.stateMu.RUnlock()
+	return h.nowState
+}
+
+func (h *runtimeHandle) setState(state serviceState) {
+	h.stateMu.Lock()
+	h.nowState = state
+	h.stateMu.Unlock()
+}
+
+func (h *runtimeHandle) setLastError(message string) {
+	h.stateMu.Lock()
+	h.lastError = message
+	h.stateMu.Unlock()
+}
+
+func (h *runtimeHandle) snapshot() serviceSnapshot {
+	h.stateMu.RLock()
+	defer h.stateMu.RUnlock()
+	return serviceSnapshot{
+		State:     h.nowState,
+		Running:   h.nowState == serviceStateRunning,
+		Closed:    h.nowState == serviceStateClosed,
+		LastError: h.lastError,
+	}
 }
 
 func (h *runtimeHandle) startLogSubscription() {
