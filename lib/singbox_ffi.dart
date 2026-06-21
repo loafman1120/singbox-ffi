@@ -124,6 +124,30 @@ typedef SbServiceStateDart = int Function(
   Pointer<Pointer<Utf8>>,
 );
 
+typedef SbSystemProxyStatusNative = Int32 Function(
+  Pointer<Pointer<Utf8>>,
+  Pointer<Pointer<Utf8>>,
+);
+typedef SbSystemProxyStatusDart = int Function(
+  Pointer<Pointer<Utf8>>,
+  Pointer<Pointer<Utf8>>,
+);
+
+typedef SbSetSystemProxyNative = Int32 Function(
+  Pointer<Utf8>,
+  Int32,
+  Pointer<Utf8>,
+  Bool,
+  Pointer<Pointer<Utf8>>,
+);
+typedef SbSetSystemProxyDart = int Function(
+  Pointer<Utf8>,
+  int,
+  Pointer<Utf8>,
+  bool,
+  Pointer<Pointer<Utf8>>,
+);
+
 /// Exported native symbol names used by [SingboxRawBindings].
 final class SingboxNativeSymbols {
   const SingboxNativeSymbols._();
@@ -140,6 +164,8 @@ final class SingboxNativeSymbols {
   static const drainLogs = 'sb_drain_logs';
   static const clearLogs = 'sb_clear_logs';
   static const serviceState = 'sb_service_state';
+  static const systemProxyStatus = 'sb_system_proxy_status';
+  static const setSystemProxy = 'sb_set_system_proxy';
 }
 
 /// Typed Dart FFI bindings for the native `singboxffi` C ABI.
@@ -191,6 +217,14 @@ class SingboxRawBindings {
         sbServiceState =
             library.lookupFunction<SbServiceStateNative, SbServiceStateDart>(
           SingboxNativeSymbols.serviceState,
+        ),
+        sbSystemProxyStatus = library
+            .lookupFunction<SbSystemProxyStatusNative, SbSystemProxyStatusDart>(
+          SingboxNativeSymbols.systemProxyStatus,
+        ),
+        sbSetSystemProxy = library
+            .lookupFunction<SbSetSystemProxyNative, SbSetSystemProxyDart>(
+          SingboxNativeSymbols.setSystemProxy,
         );
 
   /// Opens [path], or the platform default library name when [path] is omitted.
@@ -231,6 +265,8 @@ class SingboxRawBindings {
   final SbDrainLogsDart sbDrainLogs;
   final SbClearLogsDart sbClearLogs;
   final SbServiceStateDart sbServiceState;
+  final SbSystemProxyStatusDart sbSystemProxyStatus;
+  final SbSetSystemProxyDart sbSetSystemProxy;
 }
 
 /// Broad category for errors reported by the high-level wrapper.
@@ -413,6 +449,55 @@ class SingboxServiceSnapshot {
     return 'SingboxServiceSnapshot(state: ${state.name}, running: $running, '
         'closed: $closed, lastError: $lastError)';
   }
+}
+
+/// System proxy state reported by the native platform layer.
+class SingboxSystemProxyStatus {
+  const SingboxSystemProxyStatus({
+    required this.platform,
+    required this.supported,
+    required this.enabled,
+    this.server,
+    this.bypass,
+    required this.hasSavedState,
+  });
+
+  factory SingboxSystemProxyStatus.fromJson(Map<String, Object?> json) {
+    return SingboxSystemProxyStatus(
+      platform: json['platform'] as String? ?? '',
+      supported: json['supported'] == true,
+      enabled: json['enabled'] == true,
+      server: json['server'] as String?,
+      bypass: json['bypass'] as String?,
+      hasSavedState: json['hasSavedState'] == true,
+    );
+  }
+
+  final String platform;
+  final bool supported;
+  final bool enabled;
+  final String? server;
+  final String? bypass;
+  final bool hasSavedState;
+
+  @override
+  String toString() {
+    return 'SingboxSystemProxyStatus(platform: $platform, '
+        'supported: $supported, enabled: $enabled, server: $server)';
+  }
+}
+
+/// Target endpoint used when enabling the OS system proxy.
+class SingboxSystemProxyOptions {
+  const SingboxSystemProxyOptions({
+    this.host = '127.0.0.1',
+    this.port = 2080,
+    this.bypass = '<local>',
+  });
+
+  final String host;
+  final int port;
+  final String bypass;
 }
 
 /// High-level Dart wrapper around the native `singboxffi` library.
@@ -618,7 +703,12 @@ class SingboxFfi {
   ///
   /// The returned [SingboxService] owns the native handle and should be closed
   /// when the service is no longer needed.
-  SingboxService start(String configJson) {
+  SingboxService start(
+    String configJson, {
+    bool systemProxy = false,
+    SingboxSystemProxyOptions systemProxyOptions =
+        const SingboxSystemProxyOptions(),
+  }) {
     final config = configJson.toNativeUtf8(allocator: calloc);
     final handleOut = calloc<Uint64>();
     final errOut = calloc<Pointer<Utf8>>();
@@ -627,7 +717,16 @@ class SingboxFfi {
       if (code != 0) {
         throw takeNativeException(errOut, fallbackCode: 'service.start_failed');
       }
-      return SingboxService._(this, handleOut.value);
+      final service = SingboxService._(this, handleOut.value);
+      if (systemProxy) {
+        try {
+          service.enableSystemProxy(systemProxyOptions);
+        } catch (_) {
+          service.close();
+          rethrow;
+        }
+      }
+      return service;
     } finally {
       calloc.free(config);
       calloc.free(handleOut);
@@ -743,6 +842,61 @@ class SingboxFfi {
       );
     } finally {
       calloc.free(jsonOut);
+      calloc.free(errOut);
+    }
+  }
+
+  /// Returns the current OS system proxy state.
+  SingboxSystemProxyStatus systemProxyStatus() {
+    final jsonOut = calloc<Pointer<Utf8>>();
+    final errOut = calloc<Pointer<Utf8>>();
+    try {
+      final code = raw.sbSystemProxyStatus(jsonOut, errOut);
+      if (code != 0) {
+        throw takeNativeException(
+          errOut,
+          fallbackKind: SingboxErrorKind.systemProxyUnavailable,
+          fallbackCode: 'system_proxy.status_failed',
+        );
+      }
+      final payload = takeString(jsonOut.value);
+      return SingboxSystemProxyStatus.fromJson(
+        Map<String, Object?>.from(jsonDecode(payload) as Map),
+      );
+    } finally {
+      calloc.free(jsonOut);
+      calloc.free(errOut);
+    }
+  }
+
+  /// Enables or restores the OS system proxy.
+  void setSystemProxy(
+    bool enabled, {
+    SingboxSystemProxyOptions options = const SingboxSystemProxyOptions(),
+  }) {
+    final host = options.host.toNativeUtf8(allocator: calloc);
+    final bypass = options.bypass.toNativeUtf8(allocator: calloc);
+    final errOut = calloc<Pointer<Utf8>>();
+    try {
+      final code = raw.sbSetSystemProxy(
+        host,
+        options.port,
+        bypass,
+        enabled,
+        errOut,
+      );
+      if (code != 0) {
+        throw takeNativeException(
+          errOut,
+          fallbackKind: SingboxErrorKind.systemProxyUnavailable,
+          fallbackCode: enabled
+              ? 'system_proxy.enable_failed'
+              : 'system_proxy.restore_failed',
+        );
+      }
+    } finally {
+      calloc.free(host);
+      calloc.free(bypass);
       calloc.free(errOut);
     }
   }
@@ -880,6 +1034,7 @@ class SingboxService {
   /// Native service handle.
   final SbHandle handle;
   bool _closed = false;
+  bool _systemProxyEnabled = false;
 
   /// Whether this Dart wrapper has already released its native handle.
   bool get isClosed => _closed;
@@ -947,6 +1102,32 @@ class SingboxService {
     return _ffi.logs(handle, interval: interval, batchSize: batchSize);
   }
 
+  /// Enables the OS system proxy for this running service.
+  ///
+  /// The proxy is restored automatically when [close] is called.
+  void enableSystemProxy([
+    SingboxSystemProxyOptions options = const SingboxSystemProxyOptions(),
+  ]) {
+    if (_closed) {
+      throw SingboxException(
+        'service is closed',
+        kind: SingboxErrorKind.serviceState,
+        code: 'service.closed',
+      );
+    }
+    _ffi.setSystemProxy(true, options: options);
+    _systemProxyEnabled = true;
+  }
+
+  /// Restores the OS system proxy if this service enabled it.
+  void disableSystemProxy() {
+    if (!_systemProxyEnabled) {
+      return;
+    }
+    _ffi.setSystemProxy(false);
+    _systemProxyEnabled = false;
+  }
+
   /// Stops the native service and releases its handle.
   void close() {
     if (_closed) {
@@ -954,6 +1135,15 @@ class SingboxService {
     }
     _closed = true;
     try {
+      if (_systemProxyEnabled) {
+        try {
+          _ffi.setSystemProxy(false);
+          _systemProxyEnabled = false;
+        } catch (_) {
+          // Still stop and free the native service; callers can query/restore
+          // system proxy explicitly if platform restoration failed.
+        }
+      }
       _ffi.stop(handle);
     } finally {
       _ffi.freeHandle(handle);

@@ -257,6 +257,38 @@ func sb_service_state(handle C.sb_handle, jsonOut **C.char, errOut **C.char) C.i
 	return 0
 }
 
+//export sb_system_proxy_status
+func sb_system_proxy_status(jsonOut **C.char, errOut **C.char) C.int32_t {
+	clearErr(errOut)
+	if jsonOut == nil {
+		setErr(errOut, "sb_system_proxy_status: nil output")
+		return -1
+	}
+	*jsonOut = nil
+	status, err := getSystemProxyStatus()
+	if err != nil {
+		setErr(errOut, err.Error())
+		return -1
+	}
+	payload, err := json.Marshal(status)
+	if err != nil {
+		setErr(errOut, err.Error())
+		return -1
+	}
+	*jsonOut = C.CString(string(payload))
+	return 0
+}
+
+//export sb_set_system_proxy
+func sb_set_system_proxy(host *C.char, port C.int32_t, bypass *C.char, enabled C.bool, errOut **C.char) C.int32_t {
+	clearErr(errOut)
+	if err := setSystemProxy(bool(enabled), C.GoString(host), int32(port), C.GoString(bypass)); err != nil {
+		setErr(errOut, err.Error())
+		return -1
+	}
+	return 0
+}
+
 func newRuntimeHandle(server *libbox.CommandServer) *runtimeHandle {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &runtimeHandle{
@@ -348,6 +380,15 @@ type serviceSnapshot struct {
 	Running   bool         `json:"running"`
 	Closed    bool         `json:"closed"`
 	LastError string       `json:"lastError,omitempty"`
+}
+
+type systemProxyStatus struct {
+	Platform      string `json:"platform"`
+	Supported     bool   `json:"supported"`
+	Enabled       bool   `json:"enabled"`
+	Server        string `json:"server,omitempty"`
+	Bypass        string `json:"bypass,omitempty"`
+	HasSavedState bool   `json:"hasSavedState"`
 }
 
 func (h *runtimeHandle) state() serviceState {
@@ -511,10 +552,14 @@ type desktopCommandHandler struct{}
 func (desktopCommandHandler) ServiceStop() error   { return nil }
 func (desktopCommandHandler) ServiceReload() error { return nil }
 func (desktopCommandHandler) GetSystemProxyStatus() (*libbox.SystemProxyStatus, error) {
-	return &libbox.SystemProxyStatus{Available: false, Enabled: false}, nil
+	status, err := getSystemProxyStatus()
+	if err != nil {
+		return nil, err
+	}
+	return &libbox.SystemProxyStatus{Available: status.Supported, Enabled: status.Enabled}, nil
 }
-func (desktopCommandHandler) SetSystemProxyEnabled(bool) error {
-	return errors.New("system proxy is not implemented by singbox-ffi")
+func (desktopCommandHandler) SetSystemProxyEnabled(enabled bool) error {
+	return setSystemProxy(enabled, "127.0.0.1", 2080, "<local>")
 }
 func (desktopCommandHandler) TriggerNativeCrash() error { return errors.New("native crash disabled") }
 func (desktopCommandHandler) WriteDebugMessage(string)  {}

@@ -22,6 +22,7 @@ project's GitHub Releases.
 - Reload a running service with new JSON config.
 - Stop and free a running service handle.
 - Drain or stream service logs for UI log panels.
+- Enable and restore the desktop system proxy for local proxy inbounds.
 - Expose the same ABI to C, Dart raw FFI bindings, and a small Dart wrapper.
 
 The wrapper currently supports proxy-style sing-box configs such as local
@@ -32,7 +33,6 @@ The wrapper currently supports proxy-style sing-box configs such as local
 These platform integrations are not implemented by this wrapper yet:
 
 - TUN mode (`OpenTun` returns an unsupported error).
-- System proxy toggling.
 - General event draining APIs beyond logs.
 - SSH agent, platform shell, SFTP, user lookup, and connection-owner lookup.
 
@@ -140,9 +140,12 @@ core.checkConfig(configJson);
 
 final service = core.start(configJson);
 service.state();
+core.systemProxyStatus();
+service.enableSystemProxy();
 service.logs();
 service.drainLogs();
 service.clearLogs();
+service.disableSystemProxy();
 service.reload(nextConfigJson);
 service.close();
 ```
@@ -198,6 +201,10 @@ int32_t sb_drain_logs(sb_handle handle, int32_t max_entries,
                       char **json_out, char **err_out);
 int32_t sb_clear_logs(sb_handle handle, char **err_out);
 int32_t sb_service_state(sb_handle handle, char **json_out, char **err_out);
+int32_t sb_system_proxy_status(char **json_out, char **err_out);
+int32_t sb_set_system_proxy(const char *host, int32_t port,
+                            const char *bypass, bool enabled,
+                            char **err_out);
 ```
 
 Strings returned by the core must be released with `sb_free_string`. Handles
@@ -211,6 +218,14 @@ directly.
 
 `sb_service_state` returns a JSON state snapshot for a running handle. Dart
 callers normally use `SingboxService.state()`.
+
+`sb_system_proxy_status` and `sb_set_system_proxy` wrap the platform system
+proxy helper used by libbox's system proxy callbacks. Dart callers normally use
+`SingboxFfi.systemProxyStatus()`, `SingboxFfi.setSystemProxy()`, or
+`SingboxService.enableSystemProxy()`.
+
+System proxy support is implemented for Windows, macOS, and Linux desktop
+environments with GSettings. Other platforms return an unsupported error.
 
 ## Build Native Artifacts Locally
 

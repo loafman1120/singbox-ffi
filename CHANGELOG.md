@@ -1,9 +1,11 @@
-## 0.1.3
+## 0.1.4
 
 - Add structured error metadata with `SingboxErrorKind` and optional error
   codes on `SingboxException`.
 - Add native service state snapshots through `SingboxService.state()`.
 - Make repeated native stop calls for the same handle idempotent.
+- Add desktop system proxy status, enable, and restore support through the
+  libbox system proxy callbacks and Dart wrapper APIs.
 
 ## 0.1.2
 
