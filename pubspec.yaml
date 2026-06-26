@@ -1,6 +1,6 @@
 name: singbox_ffi
 description: Flutter FFI bindings and platform packaging for embedding the sing-box libbox core from Dart.
-version: 0.1.4
+version: 0.1.5
 repository: https://github.com/loafman1120/singbox-ffi
 issue_tracker: https://github.com/loafman1120/singbox-ffi/issues
 topics:

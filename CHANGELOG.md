@@ -1,3 +1,8 @@
+## 0.1.5
+
+- Update the embedded sing-box/libbox dependency to `v1.14.0-alpha.35`.
+- Refresh related upstream runtime dependencies used by the native core.
+
 ## 0.1.4
 
 - Add structured error metadata with `SingboxErrorKind` and optional error
