@@ -1,3 +1,12 @@
+## 0.1.6
+
+- Update the embedded sing-box/libbox dependency to `v1.14.0-alpha.36`.
+- Start desktop services through `daemon.StartedService` so Windows TUN
+  inbounds use sing-box/sing-tun's native adapter path instead of the libbox
+  platform `OpenTun` callback.
+- Split the native Go FFI runtime, logging, initialization, and desktop service
+  code into focused files for easier maintenance.
+
 ## 0.1.5
 
 - Update the embedded sing-box/libbox dependency to `v1.14.0-alpha.35`.

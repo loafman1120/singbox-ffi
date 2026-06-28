@@ -3,7 +3,8 @@ module github.com/loafman1120/singbox-ffi
 go 1.26
 
 require (
-	github.com/sagernet/sing-box v1.14.0-alpha.35
+	github.com/sagernet/sing v0.8.12-0.20260625092856-31bbf21d4b12
+	github.com/sagernet/sing-box v1.14.0-alpha.36
 	golang.org/x/sys v0.41.0
 	google.golang.org/grpc v1.79.1
 	google.golang.org/protobuf v1.36.11
@@ -112,7 +113,6 @@ require (
 	github.com/sagernet/netlink v0.0.0-20240612041022-b9a21c07ac6a // indirect
 	github.com/sagernet/nftables v0.3.0-mod.2 // indirect
 	github.com/sagernet/quic-go v0.59.0-sing-box-mod.4 // indirect
-	github.com/sagernet/sing v0.8.12-0.20260625092856-31bbf21d4b12 // indirect
 	github.com/sagernet/sing-cloudflared v0.1.1 // indirect
 	github.com/sagernet/sing-mux v0.3.5 // indirect
 	github.com/sagernet/sing-quic v0.6.2-0.20260525051024-9467ede27fb7 // indirect
