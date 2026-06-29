@@ -1,3 +1,7 @@
+## 0.1.7
+
+- Update the embedded sing-box/libbox dependency to `v1.14.0-alpha.37`.
+
 ## 0.1.6
 
 - Update the embedded sing-box/libbox dependency to `v1.14.0-alpha.36`.
